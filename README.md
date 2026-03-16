@@ -1,2 +1,198 @@
 # Stellar-forge
 StellarForge - Stellar Token Deployer StellarForge is a user-friendly decentralized application (dApp) that enables creators, entrepreneurs, and businesses in emerging markets to deploy custom tokens on the Stellar blockchain without writing a single line of code.
+# StellarForge - Stellar Token Deployer
+
+StellarForge is a user-friendly decentralized application (dApp) that enables creators, entrepreneurs, and businesses in emerging markets to deploy custom tokens on the Stellar blockchain without writing a single line of code.
+
+## Features
+
+- **Token Factory Contract**: Deploy custom tokens on Stellar using Soroban smart contracts
+- **Fee-Based System**: Configurable fees for token creation, metadata setting, and minting
+- **IPFS Integration**: Store token metadata (images, descriptions) on IPFS via Pinata
+- **Wallet Integration**: Connect with Freighter wallet for seamless transactions
+- **Burn Functionality**: Burn tokens to reduce supply
+- **Admin Controls**: Update fees and manage the factory
+- **Testnet & Mainnet Support**: Deploy on both testnet and mainnet
+
+## Tech Stack
+
+### Backend (Smart Contracts)
+- **Rust**: Programming language for Soroban contracts
+- **Soroban SDK**: Stellar's smart contract development framework
+- **Soroban Token SDK**: For token operations
+
+### Frontend
+- **React 19**: UI framework
+- **TypeScript**: Type-safe JavaScript
+- **Vite**: Build tool and dev server
+- **Tailwind CSS**: Utility-first CSS framework
+- **Vitest**: Testing framework
+
+### Integrations
+- **Freighter Wallet**: Stellar wallet browser extension
+- **IPFS/Pinata**: Decentralized file storage for metadata
+- **Stellar Horizon**: Blockchain data API
+- **Soroban RPC**: Smart contract interaction
+
+## Prerequisites
+
+- **Rust**: For building Soroban contracts
+- **Node.js** (v18+): For frontend development
+- **Soroban CLI**: For contract deployment and testing
+- **Freighter Wallet**: Browser extension for Stellar transactions
+
+## Installation & Setup
+
+### 1. Clone the Repository
+```bash
+git clone <repository-url>
+cd stellar-forge
+```
+
+### 2. Setup Soroban Environment
+Run the setup script to install Rust, Soroban CLI, and configure testnet:
+```bash
+./scripts/setup-soroban.sh
+```
+
+### 3. Install Frontend Dependencies
+```bash
+cd frontend
+npm install
+```
+
+### 4. Environment Variables
+Create a `.env` file in the `frontend` directory:
+```env
+VITE_NETWORK=testnet
+VITE_FACTORY_CONTRACT_ID=<deployed-contract-id>
+VITE_IPFS_API_KEY=<pinata-api-key>
+VITE_IPFS_API_SECRET=<pinata-api-secret>
+```
+
+## Building & Testing
+
+### Smart Contracts
+```bash
+cd contracts
+cargo build --target wasm32-unknown-unknown --release
+```
+
+### Run Contract Tests
+```bash
+cd contracts/token-factory
+cargo test
+```
+
+### Frontend
+```bash
+cd frontend
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run test         # Run tests
+npm run lint         # Lint code
+```
+
+## Contract Functions
+
+### Initialization
+- `initialize(admin, treasury, base_fee, metadata_fee)`: Set up the factory with admin controls and fees
+
+### Token Operations
+- `create_token(creator, name, symbol, decimals, initial_supply, fee_payment)`: Deploy a new token
+- `mint_tokens(token_address, admin, to, amount, fee_payment)`: Mint additional tokens
+- `burn(token_address, from, amount)`: Burn tokens from supply
+
+### Metadata
+- `set_metadata(token_address, admin, metadata_uri, fee_payment)`: Set token metadata URI
+
+### Admin Functions
+- `update_fees(admin, base_fee?, metadata_fee?)`: Update factory fees
+
+### View Functions
+- `get_state()`: Get factory state
+- `get_base_fee()`: Get token creation fee
+- `get_metadata_fee()`: Get metadata setting fee
+- `get_token_info(index)`: Get token information by index
+
+## Usage
+
+1. **Connect Wallet**: Use Freighter wallet to connect to the dApp
+2. **Create Token**: Fill in token details (name, symbol, decimals, supply) and pay the creation fee
+3. **Set Metadata**: Upload token image and description to IPFS
+4. **Mint Tokens**: Mint additional tokens as needed
+5. **Manage Supply**: Burn tokens to reduce circulating supply
+
+## Deployment
+
+### Contract Deployment
+```bash
+# Build the contract
+cd contracts/token-factory
+cargo build --target wasm32-unknown-unknown --release
+
+# Deploy to testnet
+soroban contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/token_factory.wasm \
+  --source <your-secret-key> \
+  --network testnet
+
+# Initialize the contract
+soroban contract invoke \
+  --id <contract-id> \
+  --source <your-secret-key> \
+  --network testnet \
+  -- \
+  initialize \
+  --admin <admin-address> \
+  --treasury <treasury-address> \
+  --base_fee 70000000 \
+  --metadata_fee 30000000
+```
+
+### Frontend Deployment
+```bash
+cd frontend
+npm run build
+# Deploy the dist/ folder to your hosting service (Vercel, Netlify, etc.)
+```
+
+## Project Structure
+
+```
+stellar-forge/
+├── contracts/                 # Soroban smart contracts
+│   ├── Cargo.toml            # Workspace configuration
+│   └── token-factory/        # Token factory contract
+│       ├── Cargo.toml
+│       └── src/
+│           ├── lib.rs        # Contract implementation
+│           └── test.rs       # Contract tests
+├── frontend/                  # React application
+│   ├── src/
+│   │   ├── components/       # UI components
+│   │   ├── services/         # API integrations
+│   │   ├── hooks/            # React hooks
+│   │   ├── config/           # Configuration files
+│   │   └── utils/            # Utility functions
+│   ├── package.json
+│   └── vite.config.ts
+├── scripts/                   # Setup scripts
+└── README.md
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Disclaimer
+
+This software is for educational and development purposes. Always test thoroughly on testnet before mainnet deployment. The authors are not responsible for any financial losses incurred through the use of this software.
