@@ -11,6 +11,7 @@ export const MintForm: React.FC = () => {
   const { stellarService } = useStellarContext()
   const [tokenAddress, setTokenAddress] = useState('')
 import { stellarService } from '../services/stellar'
+import type { TokenInfo } from '../types'
 
 interface MintFormProps {
   tokenAddress?: string
@@ -20,7 +21,7 @@ interface MintFormProps {
 export const MintForm: React.FC<MintFormProps> = ({ tokenAddress: initialAddress = '', onSuccess }) => {
   const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [amount, setAmount] = useState('')
-  const [tokenInfo, setTokenInfo] = useState<any>(null)
+  const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
 
   const debouncedAddress = useDebounce(tokenAddress, 300)
 

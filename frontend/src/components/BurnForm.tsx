@@ -16,7 +16,7 @@ interface BurnFormProps {
 export const BurnForm: React.FC<BurnFormProps> = ({ tokenAddress: initialAddress = '', onSuccess }) => {
   const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [amount, setAmount] = useState('')
-  const [tokenInfo, setTokenInfo] = useState<any>(null)
+  const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
 
   const debouncedAddress = useDebounce(tokenAddress, 300)
 
