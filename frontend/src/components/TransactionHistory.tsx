@@ -97,6 +97,7 @@ export const TransactionHistory: React.FC<Props> = ({
   tokenAddress,
   pageSize = 20,
 }) => {
+  const { stellarService } = useStellarContext()
   const [events, setEvents] = useState<ContractEvent[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)

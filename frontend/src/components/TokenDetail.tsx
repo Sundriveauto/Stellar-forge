@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { useStellarContext } from '../context/StellarContext'
 import { useParams, Link } from 'react-router-dom'
 import { stellarService } from '../services/stellar'
 import { ipfsService } from '../services/ipfs'
@@ -28,6 +30,7 @@ function formatTimestamp(ts: number): string {
 }
 
 export const TokenDetail: React.FC = () => {
+  const { stellarService } = useStellarContext()
   const { address } = useParams<{ address: string }>()
   const { addToast } = useToast()
 

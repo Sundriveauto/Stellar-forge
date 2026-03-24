@@ -3,6 +3,13 @@ import { useState, useEffect } from 'react'
 import { Input } from './UI/Input'
 import { Button } from './UI/Button'
 import { useDebounce } from '../hooks/useDebounce'
+import { useStellarContext } from '../context/StellarContext'
+// import { useWallet } from '../hooks/useWallet'
+// import { walletService } from '../services/wallet'
+
+export const MintForm: React.FC = () => {
+  const { stellarService } = useStellarContext()
+  const [tokenAddress, setTokenAddress] = useState('')
 import { stellarService } from '../services/stellar'
 
 interface MintFormProps {

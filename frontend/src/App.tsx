@@ -184,11 +184,13 @@ function AppContent() {
 function App() {
   return (
     <NetworkProvider>
-      <WalletProvider>
-        <ToastProvider>
-          <AppContent />
-        </ToastProvider>
-      </WalletProvider>
+      <StellarProvider>
+        <WalletProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </WalletProvider>
+      </StellarProvider>
     </NetworkProvider>
   )
 }

@@ -3,8 +3,11 @@ import { useState, useEffect } from 'react'
 import { Input } from './UI/Input'
 import { Button } from './UI/Button'
 import { useDebounce } from '../hooks/useDebounce'
-import { stellarService } from '../services/stellar'
+import { useStellarContext } from '../context/StellarContext'
 
+export const BurnForm: React.FC = () => {
+  const { stellarService } = useStellarContext()
+  const [tokenAddress, setTokenAddress] = useState('')
 interface BurnFormProps {
   tokenAddress?: string
   onSuccess?: () => void
