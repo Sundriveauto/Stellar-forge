@@ -166,6 +166,49 @@ fn test_burn_not_blocked_when_paused() {
     assert_ne!(result, Err(Ok(Error::ContractPaused)));
 }
 
+// ── transfer_admin ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_admin_can_transfer_ownership() {
+    let (env, client, admin, _treasury) = setup_env();
+    let new_admin = Address::generate(&env);
+
+    client.transfer_admin(&admin, &new_admin);
+
+    let state = client.get_state();
+    assert_eq!(state.admin, new_admin);
+}
+
+#[test]
+fn test_old_admin_loses_privileges_after_transfer() {
+    let (env, client, admin, _treasury) = setup_env();
+    let new_admin = Address::generate(&env);
+
+    client.transfer_admin(&admin, &new_admin);
+
+    // old admin can no longer pause
+    let result = client.try_pause(&admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_non_admin_cannot_transfer_admin() {
+    let (env, client, _admin, _treasury) = setup_env();
+    let stranger = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+
+    let result = client.try_transfer_admin(&stranger, &new_admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_transfer_admin_to_same_address_fails() {
+    let (_env, client, admin, _treasury) = setup_env();
+
+    let result = client.try_transfer_admin(&admin, &admin);
+    assert_eq!(result, Err(Ok(Error::InvalidParameters)));
+}
+
 // ── get_tokens_by_creator ─────────────────────────────────────────────────────
 
 #[test]
