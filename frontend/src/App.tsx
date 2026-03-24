@@ -11,7 +11,7 @@ import { Home } from './components/Home'
 import { CreateToken } from './components/CreateToken'
 import { MintForm } from './components/MintForm'
 import { BurnForm } from './components/BurnForm'
-import { Dashboard } from './components/Dashboard'
+import { TokenDashboard } from './components/Dashboard'
 import { TokenDetail } from './components/TokenDetail'
 
 const ProtectedRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
@@ -124,7 +124,7 @@ function AppContent() {
                 <Route path="/create" element={<ProtectedRoute><CreateToken /></ProtectedRoute>} />
                 <Route path="/mint" element={<ProtectedRoute><MintForm /></ProtectedRoute>} />
                 <Route path="/burn" element={<ProtectedRoute><BurnForm /></ProtectedRoute>} />
-                <Route path="/tokens" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/tokens" element={<ProtectedRoute><TokenDashboard /></ProtectedRoute>} />
                 <Route path="/tokens/:address" element={<ProtectedRoute><TokenDetail /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
