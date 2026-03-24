@@ -4,3 +4,4 @@ export { Card } from './Card';
 export { Spinner } from './Spinner';
 export { ToastContainer } from './ToastContainer';
 export { MainnetConfirmationModal } from './MainnetConfirmationModal';
+export { PaginationControls } from './PaginationControls';
