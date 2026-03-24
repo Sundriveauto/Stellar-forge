@@ -188,7 +188,13 @@ impl TokenFactory {
             return Err(Error::InvalidBurnAmount);
         }
 
-        TokenClient::new(&env, &token_address).burn(&from, &amount);
+        let token = TokenClient::new(&env, &token_address);
+        let balance = token.balance(&from);
+        if amount > balance {
+            return Err(Error::BurnAmountExceedsBalance);
+        }
+
+        token.burn(&from, &amount);
 
         env.events().publish((symbol_short!("tokens_burned"),), (token_address, from, amount));
 
