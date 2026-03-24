@@ -300,27 +300,6 @@ impl TokenFactory {
             .get(&creator_key)
             .unwrap_or_else(|| vec![&env])
     }
-
-    pub fn get_tokens(env: Env, start: u32, limit: u32) -> Vec<TokenInfo> {
-        let state: FactoryState = env.storage().instance().get(&symbol_short!("state")).unwrap();
-        let token_count = state.token_count;
-
-        if start >= token_count {
-            return Vec::new(&env);
-        }
-
-        let capped_limit = limit.min(20);
-        let end = (start + capped_limit).min(token_count);
-
-        let mut tokens = Vec::new(&env);
-
-        for i in (start + 1)..=end {
-            let token: TokenInfo = env.storage().instance().get(&i).unwrap();
-            tokens.push_back(token);
-        }
-
-        tokens
-    }
 }
 
 #[contracttype]
@@ -340,4 +319,4 @@ pub enum Error {
 }
 
 #[cfg(test)]
-mod test;
+mod test;

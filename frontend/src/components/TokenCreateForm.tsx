@@ -1,7 +1,5 @@
+import { Input,Button,MainnetConfirmationModal } from './UI';
 import { useState } from 'react'
-import { Input } from './UI/Input'
-import { Button } from './UI/Button'
-import { MainnetConfirmationModal } from './UI/MainnetConfirmationModal'
 import { useMainnetConfirmation } from '../hooks/useMainnetConfirmation'
 import { useToast } from '../context/ToastContext'
 import { stellarService } from '../services/stellar'

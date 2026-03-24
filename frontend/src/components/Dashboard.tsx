@@ -1,5 +1,5 @@
+import { Input } from './UI';
 import { useState, useEffect } from 'react'
-import { Input } from './UI/Input'
 import { TransactionHistory } from './TransactionHistory'
 import { useDebounce } from '../hooks/useDebounce'
 import { stellarService } from '../services/stellar'

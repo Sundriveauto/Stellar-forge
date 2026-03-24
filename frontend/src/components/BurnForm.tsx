@@ -1,10 +1,17 @@
+import { Input } from './UI';
 import { useState, useEffect } from 'react'
 import { Input } from './UI/Input'
+import { Button } from './UI/Button'
 import { useDebounce } from '../hooks/useDebounce'
 import { stellarService } from '../services/stellar'
 
-export const BurnForm: React.FC = () => {
-  const [tokenAddress, setTokenAddress] = useState('')
+interface BurnFormProps {
+  tokenAddress?: string
+  onSuccess?: () => void
+}
+
+export const BurnForm: React.FC<BurnFormProps> = ({ tokenAddress: initialAddress = '', onSuccess }) => {
+  const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [amount, setAmount] = useState('')
   const [tokenInfo, setTokenInfo] = useState<any>(null)
 
@@ -12,12 +19,13 @@ export const BurnForm: React.FC = () => {
 
   useEffect(() => {
     if (!debouncedAddress) return
-    stellarService.getTokenInfo(debouncedAddress).then(setTokenInfo)
+    stellarService.getTokenInfo(debouncedAddress).then(setTokenInfo).catch(() => setTokenInfo(null))
   }, [debouncedAddress])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // burn logic here
+    // burn logic placeholder
+    onSuccess?.()
   }
 
   return (
@@ -27,18 +35,23 @@ export const BurnForm: React.FC = () => {
         value={tokenAddress}
         onChange={(e) => setTokenAddress(e.target.value)}
         placeholder="G..."
+        required
       />
-      {tokenInfo && <p className="text-sm text-gray-600">Token found: {JSON.stringify(tokenInfo)}</p>}
+      {tokenInfo && (
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Token: {tokenInfo.name} ({tokenInfo.symbol})
+        </p>
+      )}
       <Input
         label="Amount"
         type="number"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
         placeholder="0"
+        min="0"
+        required
       />
-      <button type="submit" className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
-        Burn
-      </button>
+      <Button type="submit" variant="secondary">Burn</Button>
     </form>
   )
 }

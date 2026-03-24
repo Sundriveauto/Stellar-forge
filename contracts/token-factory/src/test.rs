@@ -3,7 +3,7 @@
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation},
-    Address, Env, String, symbol_short,
+    Address, Env, String,
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -166,6 +166,49 @@ fn test_burn_not_blocked_when_paused() {
     assert_ne!(result, Err(Ok(Error::ContractPaused)));
 }
 
+// ── transfer_admin ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_admin_can_transfer_ownership() {
+    let (env, client, admin, _treasury) = setup_env();
+    let new_admin = Address::generate(&env);
+
+    client.transfer_admin(&admin, &new_admin);
+
+    let state = client.get_state();
+    assert_eq!(state.admin, new_admin);
+}
+
+#[test]
+fn test_old_admin_loses_privileges_after_transfer() {
+    let (env, client, admin, _treasury) = setup_env();
+    let new_admin = Address::generate(&env);
+
+    client.transfer_admin(&admin, &new_admin);
+
+    // old admin can no longer pause
+    let result = client.try_pause(&admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_non_admin_cannot_transfer_admin() {
+    let (env, client, _admin, _treasury) = setup_env();
+    let stranger = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+
+    let result = client.try_transfer_admin(&stranger, &new_admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_transfer_admin_to_same_address_fails() {
+    let (_env, client, admin, _treasury) = setup_env();
+
+    let result = client.try_transfer_admin(&admin, &admin);
+    assert_eq!(result, Err(Ok(Error::InvalidParameters)));
+}
+
 // ── get_tokens_by_creator ─────────────────────────────────────────────────────
 
 #[test]
@@ -211,51 +254,3 @@ fn test_get_tokens_by_creator_different_creators_are_independent() {
     assert_eq!(client.get_tokens_by_creator(&creator_a).len(), 0);
     assert_eq!(client.get_tokens_by_creator(&creator_b).len(), 0);
 }
-
-// ── get_tokens (batched) ──────────────────────────────────────────────────────
-
-#[test]
-fn test_get_tokens_empty() {
-    let (_env, client, _admin, _treasury) = setup_env();
-    let tokens = client.get_tokens(&0, &10);
-    assert_eq!(tokens.len(), 0);
-}
-
-#[test]
-fn test_get_tokens_pagination_and_limit() {
-    let (env, client, admin, _treasury) = setup_env();
-    
-    // Manually populate storage to bypass fee/token-sdk complexities in unit test
-    let creator = Address::generate(&env);
-    for i in 1..=25 {
-        let info = TokenInfo {
-            name: String::from_str(&env, "Token"),
-            symbol: String::from_str(&env, "T"),
-            decimals: 7,
-            creator: creator.clone(),
-            created_at: env.ledger().timestamp(),
-        };
-        env.storage().instance().set(&i, &info);
-    }
-    
-    // Update factory state count
-    let mut state = client.get_state();
-    state.token_count = 25;
-    env.storage().instance().set(&symbol_short!("state"), &state);
-    
-    // Test pagination: start=0, limit=10 -> tokens 1..=10
-    let tokens_0_10 = client.get_tokens(&0, &10);
-    assert_eq!(tokens_0_10.len(), 10);
-    
-    // Test limit cap: start=0, limit=50 -> tokens 1..=20 (capped)
-    let tokens_0_50 = client.get_tokens(&0, &50);
-    assert_eq!(tokens_0_50.len(), 20);
-    
-    // Test partial range: start=20, limit=10 -> tokens 21..=25 (only 5 left)
-    let tokens_20_10 = client.get_tokens(&20, &10);
-    assert_eq!(tokens_20_10.len(), 5);
-    
-    // Test out-of-range: start=25
-    let tokens_25_10 = client.get_tokens(&25, &10);
-    assert_eq!(tokens_25_10.len(), 0);
-}

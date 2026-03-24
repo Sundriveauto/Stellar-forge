@@ -1,15 +1,15 @@
+import { Input,Button } from './UI';
 import { useState } from 'react'
-import { Input } from './UI/Input'
-import { Button } from './UI/Button'
 import { isValidIPFSUri } from '../utils/validation'
 import { useToast } from '../context/ToastContext'
 
 interface Props {
+  tokenAddress?: string
   onSubmit: (tokenAddress: string, metadataUri: string) => Promise<void>
 }
 
-export const SetMetadataForm: React.FC<Props> = ({ onSubmit }) => {
-  const [tokenAddress, setTokenAddress] = useState('')
+export const SetMetadataForm: React.FC<Props> = ({ tokenAddress: initialAddress = '', onSubmit }) => {
+  const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [metadataUri, setMetadataUri] = useState('')
   const [loading, setLoading] = useState(false)
   const { addToast } = useToast()

@@ -1,6 +1,6 @@
+import { Button } from './UI';
 import { useState, useRef, useEffect } from 'react'
 import { useNetwork, type Network } from '../context/NetworkContext'
-import { Button } from './UI/Button'
 
 const LABELS: Record<Network, string> = {
   testnet: 'Testnet',
