@@ -704,6 +704,11 @@ export class StellarService {
     const lastEvent = result.events[result.events.length - 1]
     return { events, cursor: lastEvent?.pagingToken ?? null }
   }
+
+  async getAllTokens(): Promise<TokenInfo[]> {
+    // TODO: replace with real contract/horizon query
+    return []
+  }
 }
 
 export const stellarService = new StellarService()
