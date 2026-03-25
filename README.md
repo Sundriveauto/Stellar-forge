@@ -205,6 +205,10 @@ For users deploying tokens, we strongly recommend:
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for local development setup and contribution guidelines.
 
+## Code of Conduct
+
+This project follows the [Contributor Covenant Code of Conduct](./CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

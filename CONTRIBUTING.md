@@ -174,6 +174,10 @@ cd contracts/token-factory
 cargo test
 ```
 
+## Code of Conduct
+
+Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+
 ## Security
 
 - Review our [Security Policy](SECURITY.md) before contributing
