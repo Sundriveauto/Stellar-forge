@@ -148,7 +148,8 @@ fn test_set_metadata() {
     let admin = Address::generate(&s.env);
     s.fund(&admin, 500);
 
-    let token_addr = s.new_token(&admin);
+    // seed_token_with_burn registers the token + idx mapping the contract needs
+    let token_addr = seed_token_with_burn(&s, &admin, true);
     s.client.set_metadata(
         &token_addr, &admin,
         &String::from_str(&s.env, "ipfs://Qm123"),
@@ -178,7 +179,7 @@ fn test_set_metadata_already_set() {
     let admin = Address::generate(&s.env);
     s.fund(&admin, 1_000);
 
-    let token_addr = s.new_token(&admin);
+    let token_addr = seed_token_with_burn(&s, &admin, true);
 
     // First call succeeds
     s.client.set_metadata(
@@ -202,8 +203,9 @@ fn test_set_metadata_different_tokens_independent() {
     let admin = Address::generate(&s.env);
     s.fund(&admin, 1_000);
 
-    let token_a = s.new_token(&admin);
-    let token_b = s.new_token(&admin);
+    // Each call to seed_token_with_burn registers a distinct token + idx entry
+    let token_a = seed_token_with_burn(&s, &admin, true);
+    let token_b = seed_token_with_burn(&s, &admin, true);
 
     // Setting metadata on two different tokens should both succeed
     s.client.set_metadata(
@@ -264,7 +266,8 @@ fn test_mint_tokens() {
     let token_admin = Address::generate(&s.env);
     s.fund(&token_admin, 1_000);
 
-    let token_addr = s.new_token(&token_admin);
+    // seed_token_with_burn registers the token + idx mapping the contract needs
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
     let recipient = Address::generate(&s.env);
 
     s.client.mint_tokens(&token_addr, &token_admin, &recipient, &5_000, &1_000);
@@ -354,7 +357,9 @@ fn test_burn_disabled_returns_error() {
     let creator = Address::generate(&s.env);
     let token_addr = seed_token_with_burn(&s, &creator, false);
 
+    // Give the burner a balance so the contract reaches the burn_enabled check
     let burner = Address::generate(&s.env);
+    StellarAssetClient::new(&s.env, &token_addr).mint(&burner, &100);
     assert_eq!(
         s.client.try_burn(&token_addr, &burner, &100),
         Err(Ok(Error::BurnNotEnabled))
@@ -369,7 +374,9 @@ fn test_set_burn_enabled_disables_burn() {
 
     s.client.set_burn_enabled(&token_addr, &creator, &false);
 
+    // Give the burner a balance so the contract reaches the burn_enabled check
     let burner = Address::generate(&s.env);
+    StellarAssetClient::new(&s.env, &token_addr).mint(&burner, &100);
     assert_eq!(
         s.client.try_burn(&token_addr, &burner, &100),
         Err(Ok(Error::BurnNotEnabled))
