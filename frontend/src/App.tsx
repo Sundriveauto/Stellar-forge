@@ -3,7 +3,8 @@ import './App.css'
 import { useTranslation } from 'react-i18next'
 import { WalletProvider } from './context/WalletContext'
 import { ToastProvider, useToast } from './context/ToastContext'
-import { NetworkProvider, useNetwork } from './context/NetworkContext'
+import { NetworkProvider } from './context/NetworkContext'
+import { StellarProvider } from './context/StellarContext'
 import { NetworkSwitcher } from './components/NetworkSwitcher'
 import { LanguageSwitcher } from './components/LanguageSwitcher'
 import { useWallet } from './hooks/useWallet'
@@ -18,6 +19,8 @@ import { TokenDetail } from './components/TokenDetail'
 import { isFactoryConfigured } from './config/env'
 import ErrorBoundary from './components/ErrorBoundary'
 import { TosProvider } from './context/TosContext'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useState } from 'react'
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { wallet } = useWallet()
@@ -29,6 +32,7 @@ function AppContent() {
   const { wallet, connect, disconnect, isConnecting, error, isInstalled } = useWallet()
   const { addToast } = useToast()
   const { t } = useTranslation()
+  const [showFriendbotBanner, setShowBanner] = useState(true)
 
   const handleGetStarted = () => addToast(t('home.welcomeToast'), 'info')
 
