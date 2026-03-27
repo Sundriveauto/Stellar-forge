@@ -63,55 +63,78 @@ function AppContent() {
 
       <div className="min-h-screen bg-gray-100">
         <header className="bg-white shadow" role="banner">
-          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">{t('app.title')}</h1>
-                <p className="mt-2 text-sm text-gray-600">{t('app.subtitle')}</p>
-              </div>
+          <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col gap-3">
+              {/* Top row: title + wallet controls */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="text-xl sm:text-3xl font-bold text-gray-900 leading-tight">{t('app.title')}</h1>
+                  <p className="mt-1 text-xs sm:text-sm text-gray-600">{t('app.subtitle')}</p>
+                </div>
 
-              <div className="flex items-center gap-4">
-                <LanguageSwitcher />
-                <NetworkSwitcher />
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                  <LanguageSwitcher />
+                  <NetworkSwitcher />
 
-                {!isInstalled && (
-                  <a
-                    href="https://www.freighter.app/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-800 underline"
-                  >
-                    {t('wallet.installFreighter')}
-                  </a>
-                )}
+                  {!isInstalled && (
+                    <a
+                      href="https://www.freighter.app/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-800 underline hidden sm:inline"
+                    >
+                      {t('wallet.installFreighter')}
+                    </a>
+                  )}
 
-                {wallet.isConnected ? (
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="text-sm font-medium text-gray-900">
-                        {wallet.address && truncateAddress(wallet.address)}
+                  {wallet.isConnected ? (
+                    <div className="flex items-center gap-2">
+                      <div className="text-right hidden sm:block">
+                        <div className="text-sm font-medium text-gray-900">
+                          {wallet.address && truncateAddress(wallet.address)}
+                        </div>
+                        {wallet.balance && (
+                          <div className="text-xs text-gray-600">{formatXLM(wallet.balance)}</div>
+                        )}
                       </div>
-                      {wallet.balance && (
-                        <div className="text-xs text-gray-600">{formatXLM(wallet.balance)}</div>
-                      )}
+                      <Button onClick={handleDisconnect} variant="secondary" size="sm">
+                        {t('wallet.disconnect')}
+                      </Button>
                     </div>
-                    <Button onClick={handleDisconnect} variant="secondary" size="sm">
-                      {t('wallet.disconnect')}
+                  ) : (
+                    <Button onClick={handleConnect} disabled={isConnecting} size="sm">
+                      {isConnecting ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner size="sm" />
+                          <span className="hidden sm:inline">{t('wallet.connecting')}</span>
+                        </span>
+                      ) : (
+                        t('wallet.connect')
+                      )}
                     </Button>
-                  </div>
-                ) : (
-                  <Button onClick={handleConnect} disabled={isConnecting} size="sm">
-                    {isConnecting ? (
-                      <span className="flex items-center gap-2">
-                        <Spinner size="sm" />
-                        {t('wallet.connecting')}
-                      </span>
-                    ) : (
-                      t('wallet.connect')
-                    )}
-                  </Button>
-                )}
+                  )}
+                </div>
               </div>
+
+              {/* Wallet address on mobile when connected */}
+              {wallet.isConnected && wallet.address && (
+                <div className="sm:hidden text-xs text-gray-600 truncate">
+                  {truncateAddress(wallet.address)}
+                  {wallet.balance && <span className="ml-2">{formatXLM(wallet.balance)}</span>}
+                </div>
+              )}
+
+              {/* Install Freighter link on mobile */}
+              {!isInstalled && (
+                <a
+                  href="https://www.freighter.app/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="sm:hidden text-xs text-blue-600 hover:text-blue-800 underline"
+                >
+                  {t('wallet.installFreighter')}
+                </a>
+              )}
             </div>
 
             <NavBar />
@@ -119,9 +142,9 @@ function AppContent() {
         </header>
 
         {showFriendbotBanner && (
-          <div className="bg-blue-50 border-b border-blue-200 p-4">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <div className="text-blue-800 text-sm">
+          <div className="bg-blue-50 border-b border-blue-200 p-3 sm:p-4">
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+              <div className="text-blue-800 text-xs sm:text-sm">
                 Your testnet balance is low. Get free testnet XLM from{' '}
                 <a
                   href={`https://friendbot.stellar.org/?addr=${wallet.address}`}
@@ -134,7 +157,7 @@ function AppContent() {
               </div>
               <button
                 onClick={() => setShowBanner(false)}
-                className="text-blue-600 hover:text-blue-800 focus:outline-none ml-4"
+                className="text-blue-600 hover:text-blue-800 focus:outline-none flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="Dismiss banner"
               >
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -153,8 +176,8 @@ function AppContent() {
           </div>
         )}
 
-        <main id="main-content" className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-          <div className="px-4 py-6 sm:px-0">
+        <main id="main-content" className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8">
+          <div className="py-2 sm:py-4">
             {error && (
               <div
                 className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg"
@@ -165,7 +188,7 @@ function AppContent() {
               </div>
             )}
 
-            <div className="bg-white p-6 rounded-lg shadow-sm">
+            <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm">
               <Routes>
                 <Route path="/" element={<ErrorBoundary><Home onGetStarted={handleGetStarted} /></ErrorBoundary>} />
                 <Route path="/create" element={<ProtectedRoute><ErrorBoundary><CreateToken /></ErrorBoundary></ProtectedRoute>} />
