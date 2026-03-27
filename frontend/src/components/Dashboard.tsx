@@ -1,15 +1,16 @@
 import React, { useState, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Input } from './UI'
 import { TransactionHistory } from './TransactionHistory'
 import { useClipboard } from '../hooks/useClipboard'
 import { useDebounce } from '../hooks/useDebounce'
 import { useTokens } from '../hooks/useTokens'
 import { STELLAR_CONFIG } from '../config/stellar'
-import { useWallet } from '../hooks/useWallet'
 
 export const TokenDashboard: React.FC = () => {
   const { tokens, isLoading, error } = useTokens()
   const { copied, copy } = useClipboard()
+  const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
 
@@ -58,18 +59,18 @@ export const TokenDashboard: React.FC = () => {
                 filteredTokens.map((token, i) => (
                   <li
                     key={token.creator + i}
-                    className="p-3 border rounded text-sm flex items-center justify-between gap-2"
+                    className="p-3 sm:p-4 border rounded text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <span className="font-medium">{token.name}</span>
                       <span className="ml-2 text-gray-500">({token.symbol})</span>
-                      <div className="text-xs text-gray-400 mt-0.5">
+                      <div className="text-xs text-gray-400 mt-0.5 truncate">
                         Created: {formatCreationDate(token.createdAt)}
                       </div>
                     </div>
                     <button
                       onClick={() => copy(token.creator)}
-                      className="text-xs text-blue-500 hover:underline shrink-0"
+                      className="text-xs text-blue-500 hover:underline shrink-0 min-h-[44px] min-w-[44px] flex items-center sm:justify-end"
                       aria-label={`Copy address for ${token.name}`}
                     >
                       {copied ? 'Copied!' : 'Copy address'}

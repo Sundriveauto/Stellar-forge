@@ -9,6 +9,7 @@ import type { TokenInfo, IPFSMetadata } from '../types'
 import { Card } from './UI/Card'
 import { Button } from './UI/Button'
 import { Spinner } from './UI/Spinner'
+import { QRCodeModal } from './UI/QRCodeModal'
 import { MintForm } from './MintForm'
 import { BurnForm } from './BurnForm'
 import { SetMetadataForm } from './SetMetadataForm'
@@ -31,6 +32,7 @@ export const TokenDetail: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
+  const [showQR, setShowQR] = useState(false)
 
   useEffect(() => {
     if (!address || !isValidContractAddress(address)) {
@@ -200,20 +202,25 @@ export const TokenDetail: React.FC = () => {
             {activePanel === 'metadata' ? 'Cancel' : 'Set Metadata'}
           </Button>
         )}
+        <Button onClick={() => setShowQR(true)} variant="outline">
+          Show QR
+        </Button>
       </div>
 
+      <QRCodeModal isOpen={showQR} address={address!} onClose={() => setShowQR(false)} />
+
       {/* Inline action panels */}
-      {activePanel === 'mint' && (
+      {activePanel === 'mint' && address && (
         <Card title="Mint More Tokens">
           <MintForm tokenAddress={address} onSuccess={() => setActivePanel(null)} />
         </Card>
       )}
-      {activePanel === 'burn' && (
+      {activePanel === 'burn' && address && (
         <Card title="Burn Tokens">
           <BurnForm tokenAddress={address} onSuccess={() => setActivePanel(null)} />
         </Card>
       )}
-      {activePanel === 'metadata' && (
+      {activePanel === 'metadata' && address && (
         <Card title="Set Metadata">
           <SetMetadataForm tokenAddress={address} onSubmit={handleSetMetadata} />
         </Card>
