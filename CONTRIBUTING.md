@@ -16,6 +16,40 @@ Thank you for your interest in contributing to StellarForge! This document provi
 - [Security](#security)
 - [Getting Help](#getting-help)
 
+## Code Quality Hooks
+
+This project uses [Husky](https://typicode.github.io/husky/) and [lint-staged](https://github.com/lint-staged/lint-staged) to enforce code quality automatically. The hooks are installed when you run `npm install` at the repo root (via the `prepare` script).
+
+### What runs automatically
+
+| Git event | Hook | What it does |
+|-----------|------|--------------|
+| `git commit` | `pre-commit` | Runs `lint-staged` on staged files: ESLint auto-fix → Prettier format. Blocks the commit if lint errors remain after auto-fix. |
+| `git push` | `pre-push` | Runs the full frontend test suite (`npm test -- --run`). Aborts the push if any tests fail. |
+
+### Targeted file types
+
+`lint-staged` runs on staged files matching: `.js`, `.jsx`, `.ts`, `.tsx`, `.json`, `.css`, `.md`
+
+### Reinstalling hooks
+
+If hooks stop working (e.g. after a fresh clone):
+
+```bash
+npm install
+```
+
+The `prepare` script re-initialises Husky automatically.
+
+### Bypassing hooks (not recommended)
+
+```bash
+git commit --no-verify -m "your message"
+git push --no-verify
+```
+
+Only use this when absolutely necessary and document the reason in your commit message.
+
 ## Prerequisites
 
 Before setting up your development environment, ensure you have the following installed:
