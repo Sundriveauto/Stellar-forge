@@ -73,7 +73,7 @@ export const validateTokenName = (name: string): boolean => {
 
 export const validateTokenSymbol = (symbol: string): boolean => {
   const trimmed = symbol.trim()
-  // Only allow alphanumeric characters and hyphens, max 12 chars
+  // Only allow alphanumeric characters and hyphens
   const validPattern = /^[A-Za-z0-9-]+$/
   return trimmed.length >= 1 && trimmed.length <= 12 && validPattern.test(trimmed)
 }
