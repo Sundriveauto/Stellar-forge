@@ -1,7 +1,6 @@
 import {
   isConnected,
   getAddress,
-  requestAccess,
   signTransaction as freighterSignTransaction,
 } from '@stellar/freighter-api'
 import { STELLAR_CONFIG } from '../config/stellar'
@@ -20,33 +19,39 @@ const FREIGHTER_INSTALL_URL = 'https://www.freighter.app/'
 export class WalletService {
   private connectedAddress: string | null = null
 
-  isInstalled(): boolean {
-    return typeof window !== 'undefined'
+  async isInstalled(): Promise<boolean> {
+    try {
+      const result = await isConnected();
+      return !!result.isConnected;
+    } catch {
+      return false;
+    }
   }
 
   async connect(): Promise<string> {
-    if (!this.isInstalled()) {
+    if (!(await this.isInstalled())) {
       throw new Error(
         `Freighter wallet is not installed. Please install it from ${FREIGHTER_INSTALL_URL}`
       )
     }
 
     try {
-      // Request access to the wallet
-      const accessObj = await requestAccess()
+      // Use getAddress as it's the more modern version in @stellar/freighter-api
+      // but fulfills the role of getPublicKey()
+      const addressObj = await getAddress()
 
-      if (accessObj.error) {
-        throw new Error(accessObj.error)
+      if (addressObj.error) {
+        throw new Error(addressObj.error)
       }
 
-      if (!accessObj.address) {
+      if (!addressObj.address) {
         throw new Error(
           `Freighter wallet is not available. Please install or unlock it from ${FREIGHTER_INSTALL_URL}`
         )
       }
 
-      this.connectedAddress = accessObj.address
-      return accessObj.address
+      this.connectedAddress = addressObj.address
+      return addressObj.address
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`Failed to connect to Freighter: ${error.message}`)
@@ -60,7 +65,7 @@ export class WalletService {
   }
 
   async signTransaction(xdr: string): Promise<string> {
-    if (!this.isInstalled()) {
+    if (!(await this.isInstalled())) {
       throw new Error('Freighter wallet is not installed')
     }
 

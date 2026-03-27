@@ -4,7 +4,7 @@ import { walletService } from '../services/wallet'
 interface WalletState {
   address: string | null
   isConnected: boolean
-  balance?: string
+  balance: string | undefined
 }
 
 interface WalletContextValue {
@@ -14,6 +14,7 @@ interface WalletContextValue {
   isInstalled: boolean
   connect: () => Promise<void>
   disconnect: () => void
+  refreshBalance: () => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null)
@@ -26,11 +27,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   })
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isInstalled, setIsInstalled] = useState<boolean>(true) // Assume installed initially
 
   const fetchBalance = async (address: string) => {
     try {
       const balance = await walletService.getBalance(address)
-      setWallet((prev) => ({ ...prev, balance }))
+      setWallet((prev: WalletState) => ({ ...prev, balance }))
     } catch (err) {
       console.error('Failed to fetch balance:', err)
     }
@@ -58,8 +60,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    const checkConnection = async () => {
-      if (!walletService.isInstalled()) {
+    const initWallet = async () => {
+      const installed = await walletService.isInstalled()
+      setIsInstalled(installed)
+
+      if (!installed) {
         return
       }
 
@@ -74,7 +79,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    checkConnection()
+    initWallet()
   }, [])
 
   return (
@@ -83,9 +88,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         wallet,
         isConnecting,
         error,
-        isInstalled: walletService.isInstalled(),
+        isInstalled,
         connect,
         disconnect,
+        refreshBalance: () => (wallet.address ? fetchBalance(wallet.address) : Promise.resolve()),
       }}
     >
       {children}
