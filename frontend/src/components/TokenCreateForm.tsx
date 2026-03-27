@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Input, Button, MainnetConfirmationModal, ConfirmModal } from './UI'
 import { useMainnetConfirmation } from '../hooks/useMainnetConfirmation'
 import { useToast } from '../context/ToastContext'
+import { useTos } from '../context/TosContext'
 import { useStellarContext } from '../context/StellarContext'
 import { TokenDeployParams } from '../types'
 import { STELLAR_CONFIG } from '../config/stellar'
@@ -22,6 +24,8 @@ export const TokenCreateForm: React.FC = () => {
   const { showModal, tokenParams, requestDeployment, closeModal, confirmDeployment } =
     useMainnetConfirmation()
   const { addToast } = useToast()
+  const { requireTos } = useTos()
+  const { t } = useTranslation()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,8 +50,9 @@ export const TokenCreateForm: React.FC = () => {
 
   const handleConfirm = () => {
     if (!pendingParams) return
+    const params = pendingParams
     setPendingParams(null)
-    requestDeployment(pendingParams, () => deployToken(pendingParams))
+    requireTos(() => requestDeployment(params, () => deployToken(params)))
   }
 
   const deployToken = async (params: TokenDeployParams) => {

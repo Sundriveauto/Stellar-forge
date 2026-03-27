@@ -1,29 +1,28 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Input, Button, ConfirmModal } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
 import { useTokenBalance } from '../hooks/useTokenBalance'
 import { useWalletContext } from '../context/WalletContext'
+import { useTos } from '../context/TosContext'
 import { stellarService } from '../services/stellar'
 import type { TokenInfo } from '../types'
-
-const ADDRESS_DEBOUNCE_DELAY = 500
 
 interface BurnFormProps {
   tokenAddress?: string
   onSuccess?: () => void
 }
 
-export const BurnForm: React.FC<BurnFormProps> = ({
-  tokenAddress: initialAddress = '',
-  onSuccess,
-}) => {
+export const BurnForm: React.FC<BurnFormProps> = ({ tokenAddress: initialAddress = '', onSuccess }) => {
+  const { t } = useTranslation()
   const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [amount, setAmount] = useState('')
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
   const [pending, setPending] = useState(false)
 
   const { wallet } = useWalletContext()
-  const debouncedAddress = useDebounce(tokenAddress, ADDRESS_DEBOUNCE_DELAY)
+  const { requireTos } = useTos()
+  const debouncedAddress = useDebounce(tokenAddress, 300)
 
   const { balance, refresh: refreshBalance } = useTokenBalance(
     debouncedAddress,
@@ -41,12 +40,11 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (amountExceedsBalance) return
-    setPending(true)
+    requireTos(() => setPending(true))
   }
 
   const handleConfirm = () => {
     setPending(false)
-    // burn logic placeholder
     refreshBalance()
     onSuccess?.()
   }
@@ -84,7 +82,7 @@ export const BurnForm: React.FC<BurnFormProps> = ({
           <p className="text-sm text-red-500">Amount exceeds your balance of {balance}</p>
         )}
         <Button type="submit" variant="secondary" disabled={amountExceedsBalance}>
-          Burn
+          {t('burnForm.burn')}
         </Button>
       </form>
 
