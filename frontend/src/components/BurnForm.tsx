@@ -1,160 +1,139 @@
 import { useState, useEffect } from 'react'
-import { Input } from './UI/Input'
-import { Button } from './UI/Button'
-import { Card } from './UI/Card'
+import { Input, Button, ConfirmModal } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
-import { useWallet } from '../hooks/useWallet'
-import { stellarService } from '../services/stellar'
+import { useTokenBalance } from '../hooks/useTokenBalance'
+import { useWalletContext } from '../context/WalletContext'
+import { useTos } from '../context/TosContext'
+import { useStellarContext } from '../context/StellarContext'
+import { useToast } from '../context/ToastContext'
 import type { TokenInfo } from '../types'
 
-function parseBurnError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err)
-  if (msg.includes('BurnAmountExceedsBalance')) {
-    return 'Burn amount exceeds your token balance.'
-  }
-  if (msg.includes('greater than 0') || msg.includes('InvalidBurnAmount')) {
-    return 'Burn amount must be greater than 0.'
-  }
-  return msg || 'An unexpected error occurred.'
+interface BurnFormProps {
+  tokenAddress?: string
+  onSuccess?: () => void
 }
 
-export const BurnForm: React.FC = () => {
-  const { wallet } = useWallet()
+export const BurnForm: React.FC<BurnFormProps> = ({
+  tokenAddress: initialAddress = '',
+  onSuccess,
+}) => {
+  const { stellarService } = useStellarContext()
+  const { wallet } = useWalletContext()
+  const { addToast } = useToast()
+  const { requireTos } = useTos()
 
-  const [tokenAddress, setTokenAddress] = useState('')
+  const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [amount, setAmount] = useState('')
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
-  const [updatedSupply, setUpdatedSupply] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [successHash, setSuccessHash] = useState<string | null>(null)
-
-  // field-level validation
-  const amountNum = parseFloat(amount)
-  const amountError =
-    amount !== '' && (isNaN(amountNum) || amountNum <= 0)
-      ? 'Amount must be greater than 0.'
-      : undefined
+  const [pending, setPending] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const debouncedAddress = useDebounce(tokenAddress, 300)
 
+  const { balance, refresh: refreshBalance } = useTokenBalance(
+    debouncedAddress,
+    wallet.address ?? '',
+  )
+
   useEffect(() => {
-    setTokenInfo(null)
-    setUpdatedSupply(null)
-    if (!debouncedAddress) return
-    stellarService.getTokenInfo(debouncedAddress).then(setTokenInfo)
-  }, [debouncedAddress])
+    if (!debouncedAddress) { setTokenInfo(null); return }
+    stellarService
+      .getTokenInfo(debouncedAddress)
+      .then(setTokenInfo)
+      .catch(() => setTokenInfo(null))
+  }, [debouncedAddress, stellarService])
+
+  const amountExceedsBalance =
+    !!amount && !!balance && BigInt(balance) > 0n && BigInt(amount) > BigInt(balance)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null)
-    setSuccessHash(null)
-    setUpdatedSupply(null)
+    if (!wallet.isConnected) { addToast('Connect your wallet first', 'error'); return }
+    if (amountExceedsBalance) return
+    requireTos(() => setPending(true))
+  }
 
-    if (!wallet.isConnected || !wallet.address) {
-      setError('Please connect your wallet first.')
-      return
-    }
-
-    if (!tokenAddress) {
-      setError('Token address is required.')
-      return
-    }
-
-    if (!amount || isNaN(amountNum) || amountNum <= 0) {
-      setError('Burn amount must be greater than 0.')
-      return
-    }
-
-    setIsLoading(true)
+  const handleConfirm = async () => {
+    setPending(false)
+    setIsSubmitting(true)
     try {
-      const result = await stellarService.burnTokens({
+      await stellarService.burnTokens({
         tokenAddress,
-        from: wallet.address,
         amount,
       })
-
-      setSuccessHash(result.transactionHash)
-
-      if (result.newTotalSupply !== undefined) {
-        setUpdatedSupply(result.newTotalSupply)
-      } else {
-        // re-fetch token info to show updated supply
-        const refreshed = await stellarService.getTokenInfo(tokenAddress)
-        if (refreshed) {
-          setTokenInfo(refreshed)
-          setUpdatedSupply(refreshed.totalSupply)
-        }
-      }
-
+      addToast('Tokens burned successfully', 'success')
       setAmount('')
+      refreshBalance()
+      onSuccess?.()
     } catch (err) {
-      setError(parseBurnError(err))
+      addToast(err instanceof Error ? err.message : 'Burn failed', 'error')
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <Card title="Burn Tokens" headingLevel={2}>
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+    <>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Token Address"
           value={tokenAddress}
-          onChange={e => { setTokenAddress(e.target.value); setError(null) }}
-          placeholder="G..."
+          onChange={(e) => setTokenAddress(e.target.value)}
+          placeholder="C..."
           required
+          disabled={!!initialAddress}
         />
-
         {tokenInfo && (
-          <div className="rounded-md bg-gray-50 px-4 py-3 text-sm text-gray-700 space-y-1">
-            <p><span className="font-medium">Token:</span> {tokenInfo.name} ({tokenInfo.symbol})</p>
-            <p>
-              <span className="font-medium">Total Supply:</span>{' '}
-              <span className={updatedSupply !== null ? 'text-red-600 font-semibold' : ''}>
-                {updatedSupply ?? tokenInfo.totalSupply}
-              </span>
-              {updatedSupply !== null && (
-                <span className="ml-2 text-xs text-gray-500">(updated after burn)</span>
-              )}
-            </p>
-          </div>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Token: {tokenInfo.name} ({tokenInfo.symbol})
+          </p>
         )}
-
+        {wallet.address && debouncedAddress && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Your balance: {balance}
+          </p>
+        )}
         <Input
           label="Amount"
           type="number"
-          min="0"
-          step="any"
           value={amount}
-          onChange={e => { setAmount(e.target.value); setError(null) }}
+          onChange={(e) => setAmount(e.target.value)}
           placeholder="0"
-          error={amountError}
+          min="1"
           required
         />
-
-        {error && (
-          <p role="alert" className="text-sm text-red-600">
-            {error}
+        {amountExceedsBalance && (
+          <p className="text-sm text-red-500" role="alert">
+            Amount exceeds your balance of {balance}
           </p>
         )}
-
-        {successHash && (
-          <p role="status" className="text-sm text-green-600">
-            Burn successful. Tx: <span className="font-mono break-all">{successHash}</span>
-          </p>
-        )}
-
         <Button
           type="submit"
-          variant="primary"
-          className="w-full bg-red-600 hover:bg-red-700 focus:ring-red-500"
-          loading={isLoading}
-          disabled={isLoading || !!amountError}
+          variant="secondary"
+          loading={isSubmitting}
+          disabled={isSubmitting || amountExceedsBalance}
+          className="w-full sm:w-auto"
         >
-          {isLoading ? 'Burning...' : 'Burn Tokens'}
+          Burn Tokens
         </Button>
       </form>
-    </Card>
+
+      <ConfirmModal
+        isOpen={pending}
+        title="Confirm Burn"
+        description="This will permanently destroy the specified token amount. This action cannot be undone."
+        details={[
+          {
+            label: 'Token',
+            value: tokenInfo ? `${tokenInfo.name} (${tokenInfo.symbol})` : tokenAddress,
+          },
+          { label: 'Amount to Burn', value: amount },
+          { label: 'Your Balance', value: balance },
+        ]}
+        onConfirm={handleConfirm}
+        onCancel={() => setPending(false)}
+        confirmLabel="Burn Tokens"
+      />
+    </>
   )
 }
