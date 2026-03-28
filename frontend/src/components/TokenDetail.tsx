@@ -18,9 +18,10 @@ import { useStellarContext } from '../context/StellarContext'
 import { useParams, Link } from 'react-router-dom'
 import { ipfsService } from '../services/ipfs'
 import { useNetwork } from '../context/NetworkContext'
-import { stellarExplorerUrl, ipfsToGatewayUrl } from '../utils/formatting'
+import { stellarExplorerUrl, ipfsToGatewayUrl, formatAddress } from '../utils/formatting'
 import { isValidContractAddress } from '../utils/validation'
 import type { TokenInfo, IPFSMetadata } from '../types'
+import { CopyButton } from './CopyButton'
 import { Card } from './UI/Card'
 import { Button } from './UI/Button'
 import { Spinner } from './UI/Spinner'
@@ -107,7 +108,9 @@ export const TokenDetail: React.FC = () => {
           No token found at address: <span className="font-mono">{address}</span>
         </p>
         <Link to="/tokens">
-          <Button variant="outline" size="sm">Back to Dashboard</Button>
+          <Button variant="outline" size="sm">
+            Back to Dashboard
+          </Button>
         </Link>
       </div>
     )
@@ -188,7 +191,9 @@ export const TokenDetail: React.FC = () => {
           </span>
         </h2>
         <Link to="/tokens">
-          <Button variant="outline" size="sm">← Back</Button>
+          <Button variant="outline" size="sm">
+            ← Back
+          </Button>
         </Link>
       </div>
 
@@ -197,15 +202,17 @@ export const TokenDetail: React.FC = () => {
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
           <div>
             <dt className="text-gray-500 dark:text-gray-400">Address</dt>
-            <dd className="font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
+            <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
               <a
                 href={stellarExplorerUrl('contract', address!, network)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-indigo-500 hover:underline"
+                title={address}
               >
-                {address}
+                {formatAddress(address!)}
               </a>
+              <CopyButton value={address!} ariaLabel="Copy token address" />
             </dd>
           </div>
           <div>
@@ -218,30 +225,36 @@ export const TokenDetail: React.FC = () => {
           </div>
           <div>
             <dt className="text-gray-500 dark:text-gray-400">Creator</dt>
-            <dd className="font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
+            <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
               {token.creator ? (
                 <a
                   href={stellarExplorerUrl('account', token.creator, network)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-indigo-500 hover:underline"
+                  title={token.creator}
                 >
-                  {token.creator}
+                  {formatAddress(token.creator)}
                 </a>
-              ) : '—'}
+              ) : (
+                '—'
+              )}
             </dd>
           </div>
           {token.createdAt && (
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Created</dt>
-              <dd className="text-gray-900 dark:text-gray-100 mt-1">{formatTimestamp(token.createdAt)}</dd>
+              <dd className="text-gray-900 dark:text-gray-100 mt-1">
+                {formatTimestamp(token.createdAt)}
+              </dd>
             </div>
           )}
           {token.metadataUri && (
             <div className="sm:col-span-2">
               <dt className="text-gray-500 dark:text-gray-400">Metadata URI</dt>
-              <dd className="font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
-                {token.metadataUri}
+              <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
+                <span className="truncate" title={token.metadataUri}>{token.metadataUri}</span>
+                <CopyButton value={token.metadataUri} ariaLabel="Copy metadata URI" />
               </dd>
             </div>
           )}
@@ -257,7 +270,9 @@ export const TokenDetail: React.FC = () => {
                 src={imageUrl}
                 alt={`${token.name} token art`}
                 className="w-24 h-24 rounded-lg object-cover flex-shrink-0 border border-gray-200 dark:border-gray-700"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                onError={(e) => {
+                  ;(e.target as HTMLImageElement).style.display = 'none'
+                }}
               />
             )}
             <div className="space-y-1 text-sm">
