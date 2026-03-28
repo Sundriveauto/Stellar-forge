@@ -30,4 +30,16 @@ export interface AppError {
   message: string
 }
 
+export interface BurnParams {
+  tokenAddress: string
+  from: string
+  amount: string
+}
+
+export interface BurnResult {
+  transactionHash: string
+  success: boolean
+  newTotalSupply?: string
+}
+
 export type SortOrder = 'newest' | 'oldest' | 'alphabetical'
