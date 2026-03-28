@@ -1,6 +1,9 @@
 
 import React from 'react';
 import { useTransactionHistory } from '../hooks/useTransactionHistory';
+import { useNetwork } from '../context/NetworkContext';
+import { stellarExplorerUrl } from '../utils/formatting';
+import { ExplorerLink } from './ExplorerLink';
 
 interface TransactionHistoryProps {
   publicKey: string;
@@ -23,6 +26,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   issuer,
   contractIds,
 }) => {
+  const { network } = useNetwork();
   const { transactions, loading, error, hasMore, loadMore } = useTransactionHistory(publicKey, {
     assetCodes,
     issuer,
@@ -94,14 +98,16 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     </span>
                   </td>
                   <td className="px-4 py-2">
-                    <a
-                      href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 underline"
-                    >
-                      View
-                    </a>
+                    {tx.hash ? (
+                      <ExplorerLink
+                        type="tx"
+                        value={tx.hash}
+                        network={network}
+                        label="View Transaction"
+                        ariaLabel={`View transaction ${tx.hash} on Stellar Expert`}
+                        className="text-blue-600 underline"
+                      />
+                    ) : null}
                   </td>
                 </tr>
               ))}
