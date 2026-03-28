@@ -4,7 +4,7 @@ import { Input, Button } from './UI'
 import { useToast } from '../context/ToastContext'
 import { ipfsService } from '../services/ipfs'
 import { isIpfsConfigured } from '../config/env'
-import { validateImageFile } from '../utils/validation'
+import { isValidImageFile } from '../utils/validation'
 
 interface MetadataUploadFormProps {
   onUploadComplete: (metadataUri: string) => void
@@ -30,7 +30,7 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
     const file = e.target.files?.[0]
     if (!file) return
 
-    const validation = validateImageFile(file)
+    const validation = isValidImageFile(file)
     if (!validation.valid) {
       addToast(validation.error || 'Invalid image file', 'error')
       return
