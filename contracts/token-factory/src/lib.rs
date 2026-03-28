@@ -67,6 +67,8 @@ pub enum Error {
     ArithmeticOverflow = 12,
     /// Storage read failed - contract state not found
     StateNotFound = 13,
+    /// Invalid token parameters (e.g. negative supply, invalid name/symbol)
+    InvalidTokenParams = 14,
 }
 
 #[contract]
@@ -126,7 +128,7 @@ impl TokenFactory {
         name: String,
         symbol: String,
         decimals: u32,
-        initial_supply: i128,
+        initial_supply: u128,
         fee_payment: i128,
     ) -> Result<Address, Error> {
         Self::require_not_paused(&env)?;
@@ -158,23 +160,26 @@ impl TokenFactory {
         name: String,
         symbol: String,
         decimals: u32,
-        initial_supply: i128,
+        initial_supply: u128,
         fee_payment: i128,
         state: &mut FactoryState,
     ) -> Result<Address, Error> {
         // Validate token name: non-empty and at most 32 characters
         if name.len() == 0 || name.len() > 32 {
-            return Err(Error::InvalidParameters);
+            return Err(Error::InvalidTokenParams);
         }
 
         // Validate token symbol: non-empty and at most 12 characters
         if symbol.len() == 0 || symbol.len() > 12 {
-            return Err(Error::InvalidParameters);
+            return Err(Error::InvalidTokenParams);
         }
 
         if fee_payment < state.base_fee {
             return Err(Error::InsufficientFee);
         }
+
+        // Fail fast if token count would overflow
+        state.token_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
 
         // Transfer fee to treasury using the stored fee token
         token::TokenClient::new(env, &state.fee_token).transfer(
@@ -199,13 +204,14 @@ impl TokenFactory {
 
         // Mint initial supply to creator if requested
         if initial_supply > 0 {
-            token::StellarAssetClient::new(env, &token_address).mint(&creator, &initial_supply);
+            token::StellarAssetClient::new(env, &token_address).mint(
+                &creator,
+                &(initial_supply as i128),
+            );
         }
 
-        // Increment token_count with overflow check
-        let new_count = state.token_count.checked_add(1)
-            .ok_or(Error::ArithmeticOverflow)?;
-        state.token_count = new_count;
+        // Increment token_count (already checked for overflow above)
+        state.token_count = state.token_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
         let index = state.token_count;
 
         env.storage().instance().set(&index, &TokenInfo {
