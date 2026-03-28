@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { CopyButton } from './CopyButton'
 import { Input, PaginationControls } from './UI'
 import { TransactionHistory } from './TransactionHistory'
@@ -21,7 +22,7 @@ function SkeletonRow() {
   return (
     <li className="p-3 border rounded animate-pulse flex items-center justify-between gap-2">
       <div className="space-y-1.5 flex-1">
-"h-4 bg-gray-200 dark:bg-slate-700 rounded w-1/3"
+        <div className="h-4 bg-gray-200 dark:bg-slate-700 rounded w-1/3" />
         <div className="h-3 bg-gray-200 rounded w-1/2" />
       </div>
       <div className="h-3 bg-gray-200 rounded w-20" />
@@ -59,7 +60,7 @@ export const TokenDashboard: React.FC = () => {
           <button
             onClick={refresh}
             disabled={isLoading}
-"mt-6 px-3 py-2 text-sm rounded border border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors shrink-0"
+            className="mt-6 px-3 py-2 text-sm rounded border border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors shrink-0"
             aria-label="Refresh token list"
           >
             ↻ Refresh
@@ -81,9 +82,13 @@ export const TokenDashboard: React.FC = () => {
             filteredRows.map((token) => (
               <li
                 key={token.address}
-"p-3 border rounded text-sm flex items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors dark:bg-slate-800 dark:border-slate-700"
+                className="p-3 border rounded text-sm flex items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors dark:bg-slate-800 dark:border-slate-700"
               >
-                <div className="min-w-0">
+                <Link
+                  to={`/tokens/${token.address}`}
+                  className="flex-1 min-w-0 hover:underline"
+                  title={`View ${token.name} details`}
+                >
                   <span className="font-medium">{token.name}</span>
                   <span className="ml-2 text-gray-500 font-mono">({token.symbol})</span>
                   <div
@@ -97,17 +102,14 @@ export const TokenDashboard: React.FC = () => {
                       Creator: {formatAddress(token.creator)}
                     </div>
                   )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-blue-500 hover:underline shrink-0 truncate max-w-[100px]" title={token.address} aria-label={`View ${token.name} on Stellar Explorer`}>
-                    {token.address}
-                  </span>
+                </Link>
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <CopyButton value={token.address} ariaLabel="Copy token address" />
                   <a
                     href={explorerUrl(token.address)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-blue-500 hover:underline shrink-0"
+                    className="text-xs text-blue-500 hover:underline"
                     aria-label={`View ${token.name} on Stellar Explorer`}
                   >
                     ↗
