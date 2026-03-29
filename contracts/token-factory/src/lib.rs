@@ -69,10 +69,8 @@ pub enum Error {
     ArithmeticOverflow = 12,
     /// Storage read failed - contract state not found
     StateNotFound = 13,
-    /// Mint would exceed the token's maximum supply cap
-    MaxSupplyExceeded = 14,
-    /// Fee split basis points do not sum to 10000
-    InvalidFeeSplit = 15,
+    /// Invalid token parameters (e.g. negative supply, invalid name/symbol)
+    InvalidTokenParams = 14,
 }
 
 #[contract]
@@ -189,8 +187,7 @@ impl TokenFactory {
         name: String,
         symbol: String,
         decimals: u32,
-        initial_supply: i128,
-        max_supply: Option<i128>,
+        initial_supply: u128,
         fee_payment: i128,
     ) -> Result<Address, Error> {
         Self::require_not_paused(&env)?;
@@ -222,31 +219,26 @@ impl TokenFactory {
         name: String,
         symbol: String,
         decimals: u32,
-        initial_supply: i128,
-        max_supply: Option<i128>,
+        initial_supply: u128,
         fee_payment: i128,
         state: &mut FactoryState,
     ) -> Result<Address, Error> {
         // Validate token name: non-empty and at most 32 characters
         if name.len() == 0 || name.len() > 32 {
-            return Err(Error::InvalidParameters);
+            return Err(Error::InvalidTokenParams);
         }
 
         // Validate token symbol: non-empty and at most 12 characters
         if symbol.len() == 0 || symbol.len() > 12 {
-            return Err(Error::InvalidParameters);
+            return Err(Error::InvalidTokenParams);
         }
 
         if fee_payment < state.base_fee {
             return Err(Error::InsufficientFee);
         }
 
-        // If a cap is set it must be positive and >= initial_supply
-        if let Some(cap) = max_supply {
-            if cap <= 0 || initial_supply > cap {
-                return Err(Error::InvalidParameters);
-            }
-        }
+        // Fail fast if token count would overflow
+        state.token_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
 
         // Transfer fee to treasury using the stored fee token
         Self::distribute_fee(env, state, &creator, fee_payment)?;
@@ -267,13 +259,14 @@ impl TokenFactory {
 
         // Mint initial supply to creator if requested
         if initial_supply > 0 {
-            token::StellarAssetClient::new(env, &token_address).mint(&creator, &initial_supply);
+            token::StellarAssetClient::new(env, &token_address).mint(
+                &creator,
+                &(initial_supply as i128),
+            );
         }
 
-        // Increment token_count with overflow check
-        let new_count = state.token_count.checked_add(1)
-            .ok_or(Error::ArithmeticOverflow)?;
-        state.token_count = new_count;
+        // Increment token_count (already checked for overflow above)
+        state.token_count = state.token_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
         let index = state.token_count;
 
         let token_name = name.clone();
@@ -297,7 +290,10 @@ impl TokenFactory {
         list.push_back(index);
         env.storage().instance().set(&creator_key, &list);
 
-        // Store reverse mapping: token_address -> index (for burn_enabled lookup)
+        // Store direct mapping: token_address -> creator (for security checks)
+        env.storage().instance().set(&(&token_address, symbol_short!("owner")), &creator);
+
+        // Store reverse mapping: token_address -> index (for other lookups if needed)
         env.storage().instance().set(&(&token_address, symbol_short!("idx")), &index);
 
         // Extend TTL for all token-related storage entries written above.
@@ -324,22 +320,11 @@ impl TokenFactory {
             return Err(Error::InsufficientFee);
         }
 
-        // Fetch TokenInfo to verify creator authorization
-        let idx_key = (&token_address, symbol_short!("idx"));
-        let index: u32 = env
-            .storage()
-            .instance()
-            .get(&idx_key)
+        // Verify admin is the token creator using direct mapping
+        let creator: Address = env.storage().instance().get(&(&token_address, symbol_short!("owner")))
             .ok_or(Error::TokenNotFound)?;
-
-        let token_info: TokenInfo = env
-            .storage()
-            .instance()
-            .get(&index)
-            .ok_or(Error::TokenNotFound)?;
-
-        // Verify admin is the token creator
-        if token_info.creator != admin {
+        
+        if creator != admin {
             return Err(Error::Unauthorized);
         }
 
@@ -373,7 +358,7 @@ impl TokenFactory {
         Self::require_not_paused(&env)?;
         admin.require_auth();
 
-        // Validate mint amount is positive and doesn't overflow
+        // Validate mint amount is positive
         if amount <= 0 {
             return Err(Error::InvalidParameters);
         }
@@ -384,22 +369,11 @@ impl TokenFactory {
             return Err(Error::InsufficientFee);
         }
 
-        // Fetch TokenInfo to verify creator authorization
-        let idx_key = (&token_address, symbol_short!("idx"));
-        let index: u32 = env
-            .storage()
-            .instance()
-            .get(&idx_key)
+        // Verify admin is the token creator using direct mapping
+        let creator: Address = env.storage().instance().get(&(&token_address, symbol_short!("owner")))
             .ok_or(Error::TokenNotFound)?;
-
-        let token_info: TokenInfo = env
-            .storage()
-            .instance()
-            .get(&index)
-            .ok_or(Error::TokenNotFound)?;
-
-        // Verify admin is the token creator
-        if token_info.creator != admin {
+        
+        if creator != admin {
             return Err(Error::Unauthorized);
         }
 
@@ -464,6 +438,14 @@ impl TokenFactory {
     ) -> Result<(), Error> {
         admin.require_auth();
 
+        // Verify admin is the token creator using direct mapping
+        let creator: Address = env.storage().instance().get(&(&token_address, symbol_short!("owner")))
+            .ok_or(Error::TokenNotFound)?;
+        
+        if creator != admin {
+            return Err(Error::Unauthorized);
+        }
+
         let idx_key = (&token_address, symbol_short!("idx"));
         let index: u32 = env
             .storage()
@@ -472,10 +454,6 @@ impl TokenFactory {
             .ok_or(Error::TokenNotFound)?;
 
         let mut info: TokenInfo = env.storage().instance().get(&index).ok_or(Error::TokenNotFound)?;
-
-        if info.creator != admin {
-            return Err(Error::Unauthorized);
-        }
 
         info.burn_enabled = enabled;
         env.storage().instance().set(&index, &info);

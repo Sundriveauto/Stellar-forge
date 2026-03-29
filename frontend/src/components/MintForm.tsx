@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Input, Button, ConfirmModal } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
+import { useTransaction } from '../hooks/useTransaction'
 import { useTos } from '../context/TosContext'
 import { useStellarContext } from '../context/StellarContext'
 import { useWalletContext } from '../context/WalletContext'
@@ -31,10 +32,23 @@ export const MintForm: React.FC<MintFormProps> = ({
   const [amount, setAmount] = useState('')
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
   const [pending, setPending] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [recipientHasAccount, setRecipientHasAccount] = useState<boolean | null>(null)
   const [recipientValidationError, setRecipientValidationError] = useState<string | null>(null)
   const [isCheckingRecipient, setIsCheckingRecipient] = useState(false)
+
+  const mintBuilder = useCallback(
+    () =>
+      stellarService.mintTokens({
+        tokenAddress,
+        to: recipient,
+        amount,
+        feePayment: BASE_FEE_STROOPS,
+      }),
+    [stellarService, tokenAddress, recipient, amount],
+  )
+
+  const { execute: executeMint, status: txStatus } = useTransaction(mintBuilder)
+  const isSubmitting = txStatus === 'simulating' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'polling'
 
   const debouncedAddress = useDebounce(tokenAddress, ADDRESS_DEBOUNCE_DELAY)
   const debouncedRecipient = useDebounce(recipient, ADDRESS_DEBOUNCE_DELAY)
@@ -85,14 +99,8 @@ export const MintForm: React.FC<MintFormProps> = ({
 
   const handleConfirm = async () => {
     setPending(false)
-    setIsSubmitting(true)
     try {
-      await stellarService.mintTokens({
-        tokenAddress,
-        to: recipient,
-        amount,
-        feePayment: BASE_FEE_STROOPS,
-      })
+      await executeMint()
       addToast('Tokens minted successfully', 'success')
       setAmount('')
       setRecipient('')
@@ -100,8 +108,6 @@ export const MintForm: React.FC<MintFormProps> = ({
       onSuccess?.()
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Mint failed', 'error')
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
