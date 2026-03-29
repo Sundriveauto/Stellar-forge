@@ -183,8 +183,7 @@ function AppContent() {
           </div>
         )}
 
-        <main id="main-content" className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8">
-          <div className="py-2 sm:py-4">
+        <div id="main-content" className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8">
             {error && (
               <div
                 className="mb-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg"
@@ -283,16 +282,13 @@ function AppContent() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
+        </div>
 
-            <Dashboard tokens={tokens} />
-          </div>
-        </main>
-
-        <ToastContainer />
-      </div>
-    </>
-  )
-}
+          <ToastContainer />
+        </div>
+      </>
+    )
+  }
 
 function App() {
   return (
