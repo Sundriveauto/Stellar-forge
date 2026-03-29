@@ -9,6 +9,8 @@ import { useStellarContext } from '../context/StellarContext'
 import { useToast } from '../context/ToastContext'
 import type { TokenInfo } from '../types'
 
+const ESTIMATED_FEE_DISPLAY = '0.01 XLM'
+
 interface BurnFormProps {
   tokenAddress?: string
   onSuccess?: () => void
@@ -131,6 +133,7 @@ export const BurnForm: React.FC<BurnFormProps> = ({
           },
           { label: 'Amount to Burn', value: amount },
           { label: 'Your Balance', value: balance },
+          { label: 'Estimated Fee', value: ESTIMATED_FEE_DISPLAY },
         ]}
         onConfirm={handleConfirm}
         onCancel={() => setPending(false)}
