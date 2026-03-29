@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Input, Button, ConfirmModal } from './UI'
+import { Input, Button, ConfirmModal, InsufficientBalanceWarning } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
 import { useTransaction } from '../hooks/useTransaction'
 import { useTos } from '../context/TosContext'

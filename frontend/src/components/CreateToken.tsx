@@ -7,6 +7,7 @@ import { TokenForm } from './TokenForm'
 import { ShareButton } from './ShareButton'
 import { CopyButton } from './CopyButton'
 import { STELLAR_CONFIG } from '../config/stellar'
+import ErrorBoundary from './ErrorBoundary'
 
 interface DeployedToken {
   address: string
