@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Input, Button, ConfirmModal } from './UI'
+import { Input, Button, ConfirmModal, InsufficientBalanceWarning } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
 import { useTransaction } from '../hooks/useTransaction'
 import { useTos } from '../context/TosContext'
@@ -126,7 +126,7 @@ export const MintForm: React.FC<MintFormProps> = ({
           disabled={!!initialAddress}
         />
         {tokenInfo && (
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
             Token: {tokenInfo.name} ({tokenInfo.symbol})
           </p>
         )}
@@ -144,12 +144,12 @@ export const MintForm: React.FC<MintFormProps> = ({
           required
         />
         {isCheckingRecipient && !recipientValidationError && (
-          <p className="text-sm text-gray-500 dark:text-gray-400" aria-live="polite">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400" aria-live="polite">
             Checking whether the recipient account is funded...
           </p>
         )}
         {recipientHasAccount === false && !recipientValidationError && (
-          <p className="text-sm text-amber-600 dark:text-amber-400" role="status" aria-live="polite">
+          <p className="text-xs sm:text-sm text-amber-600 dark:text-amber-400" role="status" aria-live="polite">
             This address does not have a Stellar account yet. It may need to be funded first.
           </p>
         )}
