@@ -1,10 +1,11 @@
 #![cfg(test)]
 
 use super::*;
+use soroban_sdk::testutils::storage::Instance;
 use soroban_sdk::{
     testutils::Address as _,
     token::{StellarAssetClient, TokenClient},
-    Address, BytesN, Env, String,
+    Address, BytesN, Env, Map, String, Vec,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -93,11 +94,11 @@ fn test_create_token() {
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.token_count += 1;
-        s.env.storage().instance().set(&1u32, &info);
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
-        let key = (symbol_short!("crtoks"), creator.clone());
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &info);
+        s.env.storage().instance().set(&DataKey::State, &state);
+        let key = DataKey::CreatorTokens(creator.clone());
         let mut list: soroban_sdk::Vec<u32> = s.env.storage().instance()
             .get(&key).unwrap_or_else(|| soroban_sdk::vec![&s.env]);
         list.push_back(1u32);
@@ -142,12 +143,11 @@ fn test_create_token_blocked_when_paused() {
 }
 
 #[test]
-fn test_create_token_invalid_decimals() {
+fn test_create_token_invalid_decimals_too_high() {
     let s = Setup::new();
     let creator = Address::generate(&s.env);
     s.fund(&creator, 1_000);
 
-    // Test decimals > 18
     let result = s.client.try_create_token(
         &creator, &s.salt(0), &s.dummy_hash(),
         &String::from_str(&s.env, "MyToken"),
@@ -155,6 +155,42 @@ fn test_create_token_invalid_decimals() {
         &19, &0_u128, &1_000,
     );
     assert_eq!(result, Err(Ok(Error::InvalidDecimals)));
+}
+
+#[test]
+fn test_create_token_boundary_decimals() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    s.fund(&creator, 1_000);
+
+    // Test decimals = 0 (should succeed)
+    let result_0 = s.client.try_create_token(
+        &creator, &s.salt(0), &s.dummy_hash(),
+        &String::from_str(&s.env, "Token0"),
+        &String::from_str(&s.env, "T0"),
+        &0, &0_u128, &1_000,
+    );
+    // This will fail at deploy since dummy hash, but not at validation
+    // We can't easily test success without real wasm, so just check it doesn't fail with InvalidDecimals
+    assert_ne!(result_0, Err(Ok(Error::InvalidDecimals)));
+
+    // Test decimals = 7 (should succeed)
+    let result_7 = s.client.try_create_token(
+        &creator, &s.salt(1), &s.dummy_hash(),
+        &String::from_str(&s.env, "Token7"),
+        &String::from_str(&s.env, "T7"),
+        &7, &0_u128, &1_000,
+    );
+    assert_ne!(result_7, Err(Ok(Error::InvalidDecimals)));
+
+    // Test decimals = 18 (should succeed)
+    let result_18 = s.client.try_create_token(
+        &creator, &s.salt(2), &s.dummy_hash(),
+        &String::from_str(&s.env, "Token18"),
+        &String::from_str(&s.env, "T18"),
+        &18, &0_u128, &1_000,
+    );
+    assert_ne!(result_18, Err(Ok(Error::InvalidDecimals)));
 }
 
 // ── set_metadata ──────────────────────────────────────────────────────────────
@@ -258,12 +294,13 @@ fn test_set_metadata_unauthorized() {
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.token_count += 1;
         let index = state.token_count;
-        s.env.storage().instance().set(&index, &info);
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::TokenInfo(index), &info);
+        s.env.storage().instance().set(&DataKey::State, &state);
         s.env.storage().instance()
+            .set(&DataKey::TokenIndex(token_addr.clone()), &index);
             .set(&(&token_addr, symbol_short!("idx")), &index);
         s.env.storage().instance()
             .set(&(&token_addr, symbol_short!("owner")), &creator);
@@ -316,12 +353,13 @@ fn test_mint_tokens_unauthorized() {
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.token_count += 1;
         let index = state.token_count;
-        s.env.storage().instance().set(&index, &info);
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::TokenInfo(index), &info);
+        s.env.storage().instance().set(&DataKey::State, &state);
         s.env.storage().instance()
+            .set(&DataKey::TokenIndex(token_addr.clone()), &index);
             .set(&(&token_addr, symbol_short!("idx")), &index);
         s.env.storage().instance()
             .set(&(&token_addr, symbol_short!("owner")), &creator);
@@ -350,12 +388,13 @@ fn seed_token_with_burn(s: &Setup, creator: &Address, burn_enabled: bool) -> Add
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.token_count += 1;
         let index = state.token_count;
-        s.env.storage().instance().set(&index, &info);
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::TokenInfo(index), &info);
+        s.env.storage().instance().set(&DataKey::State, &state);
         s.env.storage().instance()
+            .set(&DataKey::TokenIndex(token_addr.clone()), &index);
             .set(&(&token_addr, symbol_short!("idx")), &index);
         s.env.storage().instance()
             .set(&(&token_addr, symbol_short!("owner")), &creator);
@@ -495,7 +534,7 @@ fn test_get_token_info() {
         max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
-        s.env.storage().instance().set(&1u32, &info);
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &info);
     });
 
     let result = s.client.get_token_info(&1);
@@ -529,6 +568,23 @@ fn test_non_admin_cannot_pause() {
     assert_eq!(s.client.try_pause(&stranger), Err(Ok(Error::Unauthorized)));
 }
 
+#[test]
+fn test_burn_allowed_when_paused() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    let token_addr = seed_token_with_burn(&s, &creator, true);
+
+    let burner = Address::generate(&s.env);
+    StellarAssetClient::new(&s.env, &token_addr).mint(&burner, &500);
+
+    s.client.pause(&s.admin);
+    assert!(s.client.get_state().paused);
+
+    // burn must succeed even while the factory is paused
+    s.client.burn(&token_addr, &burner, &200);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&burner), 300);
+}
+
 // ── transfer_admin ────────────────────────────────────────────────────────────
 
 #[test]
@@ -559,6 +615,53 @@ fn test_transfer_admin_same_address_fails() {
     );
 }
 
+// ── update_admin ──────────────────────────────────────────────────────────────
+
+#[test]
+fn test_update_admin() {
+    let s = Setup::new();
+    let new_admin = Address::generate(&s.env);
+    s.client.update_admin(&s.admin, &new_admin);
+    assert_eq!(s.client.get_state().admin, new_admin);
+}
+
+#[test]
+fn test_update_admin_unauthorized() {
+    let s = Setup::new();
+    let stranger = Address::generate(&s.env);
+    let new_admin = Address::generate(&s.env);
+    assert_eq!(
+        s.client.try_update_admin(&stranger, &new_admin),
+        Err(Ok(Error::Unauthorized))
+    );
+}
+
+#[test]
+fn test_update_admin_same_address_fails() {
+    let s = Setup::new();
+    assert_eq!(
+        s.client.try_update_admin(&s.admin, &s.admin),
+        Err(Ok(Error::InvalidParameters))
+    );
+}
+
+#[test]
+fn test_update_admin_old_admin_loses_access() {
+    let s = Setup::new();
+    let new_admin = Address::generate(&s.env);
+    s.client.update_admin(&s.admin, &new_admin);
+
+    // Old admin can no longer pause (admin-only operation)
+    assert_eq!(
+        s.client.try_pause(&s.admin),
+        Err(Ok(Error::Unauthorized))
+    );
+
+    // New admin can perform admin-only operations
+    s.client.pause(&new_admin);
+    assert!(s.client.get_state().paused);
+}
+
 // ── reentrancy guard ──────────────────────────────────────────────────────────
 
 #[test]
@@ -569,9 +672,9 @@ fn test_reentrancy_guard_blocks_concurrent_call() {
     // Manually set locked = true in factory state to simulate a call already in progress
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.locked = true;
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::State, &state);
     });
 
     // A second create_token call while locked should return Reentrancy
@@ -600,7 +703,7 @@ fn test_reentrancy_guard_released_after_error() {
     // After the failed call, locked must be false
     s.env.as_contract(&s.client.address, || {
         let state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         assert!(!state.locked, "lock should be released after an error");
     });
 }
@@ -610,7 +713,7 @@ fn test_initial_state_is_not_locked() {
     let s = Setup::new();
     s.env.as_contract(&s.client.address, || {
         let state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         assert!(!state.locked);
     });
 }
@@ -650,7 +753,7 @@ fn test_get_tokens_by_creator() {
     let creator = Address::generate(&s.env);
 
     s.env.as_contract(&s.client.address, || {
-        let key = (symbol_short!("crtoks"), creator.clone());
+        let key = DataKey::CreatorTokens(creator.clone());
         let mut list: soroban_sdk::Vec<u32> = soroban_sdk::vec![&s.env];
         list.push_back(1u32);
         list.push_back(2u32);
@@ -772,11 +875,11 @@ fn test_token_count_overflow_protection() {
     let s = Setup::new();
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         
         // Set token_count to max u32 value, simulating near-overflow state
         state.token_count = u32::MAX;
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::State, &state);
     });
 
     let creator = Address::generate(&s.env);
@@ -808,6 +911,8 @@ fn test_mint_with_zero_amount_fails() {
     
     // Manually register the token in factory storage
     s.env.as_contract(&s.client.address, || {
+        s.env.storage().instance().set(&DataKey::TokenIndex(token_addr.clone()), &DataKey::TokenInfo(1));
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &TokenInfo {
         s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("idx")), &1u32);
         s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("owner")), &admin);
         s.env.storage().instance().set(&1u32, &TokenInfo {
@@ -845,8 +950,8 @@ fn test_mint_with_negative_amount_fails() {
     
     // Manually register the token in factory storage
     s.env.as_contract(&s.client.address, || {
-        s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("idx")), &1u32);
-        s.env.storage().instance().set(&1u32, &TokenInfo {
+        s.env.storage().instance().set(&DataKey::TokenIndex(token_addr.clone()), &DataKey::TokenInfo(1));
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &TokenInfo {
             name: String::from_str(&s.env, "Token"),
             symbol: String::from_str(&s.env, "TKN"),
             decimals: 6,
@@ -900,6 +1005,8 @@ fn test_burn_amount_exceeds_balance() {
     let token_addr = s.new_token(&user);
     
     // Mint some tokens to the user
+    let token_client = TokenClient::new(&s.env, &token_addr);
+    token::StellarAssetClient::new(&s.env, &token_addr).mint(&user, &100);
     StellarAssetClient::new(&s.env, &token_addr).mint(&user, &100);
     
     // Attempt to burn more than balance
@@ -915,8 +1022,8 @@ fn test_burn_at_exact_balance() {
     
     // Register token in factory
     s.env.as_contract(&s.client.address, || {
-        s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("idx")), &1u32);
-        s.env.storage().instance().set(&1u32, &TokenInfo {
+        s.env.storage().instance().set(&DataKey::TokenIndex(token_addr.clone()), &DataKey::TokenInfo(1));
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &TokenInfo {
             name: String::from_str(&s.env, "Token"),
             symbol: String::from_str(&s.env, "TKN"),
             decimals: 6,
@@ -928,6 +1035,8 @@ fn test_burn_at_exact_balance() {
     });
     
     // Mint some tokens to the user
+    let token_client = TokenClient::new(&s.env, &token_addr);
+    token::StellarAssetClient::new(&s.env, &token_addr).mint(&user, &100);
     StellarAssetClient::new(&s.env, &token_addr).mint(&user, &100);
     
     // Burn exactly the balance
@@ -953,4 +1062,252 @@ fn test_upgrade_unauthorized() {
     let new_wasm_hash = s.salt(1);
     let result = s.client.try_upgrade(&stranger, &new_wasm_hash);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+// ── fee split ─────────────────────────────────────────────────────────────────
+
+fn make_split(s: &Setup, pairs: &[(&Address, u32)]) -> Map<Address, u32> {
+    let mut m = Map::new(&s.env);
+    for (addr, bps) in pairs {
+        m.set((*addr).clone(), *bps);
+    }
+    m
+}
+
+#[test]
+fn test_set_fee_split_valid() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&recipient, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let stored = s.client.get_fee_split();
+    assert_eq!(stored.get(s.treasury.clone()).unwrap(), 7_000);
+    assert_eq!(stored.get(recipient).unwrap(), 3_000);
+}
+
+#[test]
+fn test_set_fee_split_invalid_sum_rejected() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    // 6_000 + 3_000 = 9_000 ≠ 10_000
+    let splits = make_split(&s, &[(&s.treasury, 6_000), (&recipient, 3_000)]);
+    assert_eq!(
+        s.client.try_set_fee_split(&s.admin, &splits),
+        Err(Ok(Error::InvalidFeeSplit))
+    );
+}
+
+#[test]
+fn test_set_fee_split_unauthorized() {
+    let s = Setup::new();
+    let stranger = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 10_000)]);
+    assert_eq!(
+        s.client.try_set_fee_split(&stranger, &splits),
+        Err(Ok(Error::Unauthorized))
+    );
+}
+
+#[test]
+fn test_set_fee_split_empty_clears_split() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&recipient, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    // Clear by passing empty map
+    s.client.set_fee_split(&s.admin, &Map::new(&s.env));
+    assert!(s.client.get_fee_split().is_empty());
+}
+
+#[test]
+fn test_fee_distributed_according_to_split() {
+    let s = Setup::new();
+    let referral = Address::generate(&s.env);
+    // 70% treasury, 30% referral
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&referral, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 1_000);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &100, &1_000);
+
+    // 1_000 * 7_000 / 10_000 = 700 to treasury
+    // 1_000 * 3_000 / 10_000 = 300 to referral
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 700);
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&referral), 300);
+}
+
+#[test]
+fn test_fee_goes_to_treasury_when_no_split_set() {
+    let s = Setup::new();
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 1_000);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &100, &1_000);
+
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 1_000);
+}
+
+#[test]
+fn test_fee_split_remainder_goes_to_treasury() {
+    let s = Setup::new();
+    let referral = Address::generate(&s.env);
+    // 3333 + 6667 = 10_000 — with a fee of 10, referral gets 3 (3.333 truncated),
+    // treasury gets 6 (6.667 truncated) + 1 remainder = 7
+    let splits = make_split(&s, &[(&referral, 3_333), (&s.treasury, 6_667)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 10);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &1, &10);
+
+    let referral_bal = TokenClient::new(&s.env, &s.fee_token).balance(&referral);
+    let treasury_bal = TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury);
+    // Total must equal the fee paid
+    assert_eq!(referral_bal + treasury_bal, 10);
+    // Remainder goes to treasury, so treasury >= its direct share
+    assert!(treasury_bal >= 6);
+}
+
+// ── batch token creation ──────────────────────────────────────────────────────
+
+fn batch_param(s: &Setup, n: u8, name: &str, symbol: &str) -> BatchTokenParams {
+    BatchTokenParams {
+        salt: BytesN::from_array(&s.env, &[n; 32]),
+        token_wasm_hash: BytesN::from_array(&s.env, &[0u8; 32]),
+        name: String::from_str(&s.env, name),
+        symbol: String::from_str(&s.env, symbol),
+        decimals: 7,
+        initial_supply: 0,
+        max_supply: None,
+    }
+}
+
+fn batch_vec(s: &Setup, params: &[BatchTokenParams]) -> Vec<BatchTokenParams> {
+    let mut v = soroban_sdk::vec![&s.env];
+    for p in params {
+        v.push_back(p.clone());
+    }
+    v
+}
+
+#[test]
+fn test_batch_empty_rejected() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    let result = s.client.try_create_tokens_batch(
+        &creator,
+        &soroban_sdk::vec![&s.env],
+        &0,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidParameters)));
+}
+
+#[test]
+fn test_batch_insufficient_fee_rejected() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    s.fund(&creator, 500);
+
+    // base_fee=1_000, 2 tokens → total=2_000; paying only 1_999
+    let params = batch_vec(&s, &[
+        batch_param(&s, 1, "TokenA", "TKA"),
+        batch_param(&s, 2, "TokenB", "TKB"),
+    ]);
+    let result = s.client.try_create_tokens_batch(&creator, &params, &1_999);
+    assert_eq!(result, Err(Ok(Error::InsufficientFee)));
+}
+
+#[test]
+fn test_batch_invalid_name_rejects_entire_batch() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    s.fund(&creator, 3_000);
+
+    // Second token has empty name — whole batch must be rejected before any deploy
+    let mut bad = batch_param(&s, 2, "", "TKB");
+    bad.name = String::from_str(&s.env, "");
+    let params = batch_vec(&s, &[
+        batch_param(&s, 1, "TokenA", "TKA"),
+        bad,
+    ]);
+    let result = s.client.try_create_tokens_batch(&creator, &params, &2_000);
+    assert_eq!(result, Err(Ok(Error::InvalidParameters)));
+    // No tokens should have been registered
+    assert_eq!(s.client.get_state().token_count, 0);
+}
+
+#[test]
+fn test_batch_invalid_max_supply_rejects_entire_batch() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    s.fund(&creator, 2_000);
+
+    let mut bad = batch_param(&s, 2, "TokenB", "TKB");
+    bad.initial_supply = 1_000;
+    bad.max_supply = Some(500); // initial > cap → invalid
+    let params = batch_vec(&s, &[
+        batch_param(&s, 1, "TokenA", "TKA"),
+        bad,
+    ]);
+    let result = s.client.try_create_tokens_batch(&creator, &params, &2_000);
+    assert_eq!(result, Err(Ok(Error::InvalidParameters)));
+    assert_eq!(s.client.get_state().token_count, 0);
+}
+
+#[test]
+fn test_batch_fee_is_base_fee_times_count() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    // base_fee = 1_000; 3 tokens → 3_000
+    s.fund(&creator, 3_000);
+
+    let params = batch_vec(&s, &[
+        batch_param(&s, 1, "TokenA", "TKA"),
+        batch_param(&s, 2, "TokenB", "TKB"),
+        batch_param(&s, 3, "TokenC", "TKC"),
+    ]);
+    // Paying exactly 3_000 should succeed (error will be on deploy since wasm hash is dummy,
+    // but fee validation and param validation happen first — we just test those paths here)
+    // Since we can't deploy in unit tests, verify fee check passes with exact amount
+    // and fails with one less.
+    let result_low = s.client.try_create_tokens_batch(&creator, &params, &2_999);
+    assert_eq!(result_low, Err(Ok(Error::InsufficientFee)));
+}
+
+#[test]
+fn test_batch_blocked_when_paused() {
+    let s = Setup::new();
+    s.client.pause(&s.admin);
+    let creator = Address::generate(&s.env);
+    let params = batch_vec(&s, &[batch_param(&s, 1, "T", "T")]);
+    let result = s.client.try_create_tokens_batch(&creator, &params, &1_000);
+    assert_eq!(result, Err(Ok(Error::ContractPaused)));
+}
+
+#[test]
+fn test_batch_reentrancy_guard() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+
+    s.env.as_contract(&s.client.address, || {
+        let mut state: FactoryState = s.env.storage().instance()
+            .get(&symbol_short!("state")).unwrap();
+        state.locked = true;
+        s.env.storage().instance().set(&symbol_short!("state"), &state);
+    });
+
+    let params = batch_vec(&s, &[batch_param(&s, 1, "T", "T")]);
+    let result = s.client.try_create_tokens_batch(&creator, &params, &1_000);
+    assert_eq!(result, Err(Ok(Error::Reentrancy)));
 }

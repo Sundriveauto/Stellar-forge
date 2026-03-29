@@ -6,11 +6,13 @@ import { useTos } from '../context/TosContext'
 import { useStellarContext } from '../context/StellarContext'
 import { useWalletContext } from '../context/WalletContext'
 import { useToast } from '../context/ToastContext'
+import { useBalanceCheck } from '../hooks/useBalanceCheck'
 import { isValidStellarAddress } from '../utils/validation'
 import type { TokenInfo } from '../types'
 
 const BASE_FEE_STROOPS = '100000' // 0.01 XLM
 const ESTIMATED_FEE_DISPLAY = '0.01 XLM'
+const ESTIMATED_FEE_XLM = 0.01
 const ADDRESS_DEBOUNCE_DELAY = 500
 
 interface MintFormProps {
@@ -26,6 +28,7 @@ export const MintForm: React.FC<MintFormProps> = ({
   const { wallet } = useWalletContext()
   const { addToast } = useToast()
   const { requireTos } = useTos()
+  const { hasSufficientBalance, shortfall, isTestnet } = useBalanceCheck(ESTIMATED_FEE_XLM)
 
   const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [recipient, setRecipient] = useState('')
@@ -166,11 +169,14 @@ export const MintForm: React.FC<MintFormProps> = ({
           type="submit"
           variant="primary"
           loading={isSubmitting}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !hasSufficientBalance}
           className="w-full sm:w-auto"
         >
           Mint Tokens
         </Button>
+        {!hasSufficientBalance && (
+          <InsufficientBalanceWarning shortfall={shortfall} isTestnet={isTestnet} />
+        )}
       </form>
 
       <ConfirmModal
