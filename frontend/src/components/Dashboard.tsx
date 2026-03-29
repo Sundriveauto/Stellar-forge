@@ -95,5 +95,5 @@ export const Dashboard: React.FC<DashboardProps> = ({ tokens }) => {
   )
 }
 
+// Alias kept for backward-compat with existing App.tsx import
 export const Dashboard = TokenDashboard
-

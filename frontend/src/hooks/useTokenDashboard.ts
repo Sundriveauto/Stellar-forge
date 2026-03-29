@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { stellarService } from '../services/stellar'
-import { useFactoryState } from './useFactoryState'
+import { useStellarContext } from '../context/StellarContext'
+import { useWalletContext } from '../context/WalletContext'
 import { STELLAR_CONFIG } from '../config/stellar'
 import type { TokenInfo } from '../types'
 
 const PAGE_SIZE = 10
 
 export interface TokenRow extends TokenInfo {
-  /** Token contract address (from token_created event) */
+  /** Token contract address */
   address: string
 }
 
@@ -23,21 +23,17 @@ export interface UseTokenDashboardResult {
   refresh: () => void
 }
 
-// Module-level cache
-let cachedRows: TokenRow[] | null = null
-let cachedAt = 0
-const CACHE_TTL_MS = 30_000
-
 export function useTokenDashboard(): UseTokenDashboardResult {
-  const { state, isLoading: stateLoading, error: stateError, refetch } = useFactoryState()
+  const { stellarService } = useStellarContext()
+  const { wallet } = useWalletContext()
 
-  const [allRows, setAllRows] = useState<TokenRow[]>(cachedRows ?? [])
+  const [allRows, setAllRows] = useState<TokenRow[]>([])
+  const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [page, setPageRaw] = useState(1)
   const fetchingRef = useRef(false)
 
-  const totalCount = state?.tokenCount ?? allRows.length
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
   const setPage = useCallback(
@@ -45,69 +41,81 @@ export function useTokenDashboard(): UseTokenDashboardResult {
     [totalPages],
   )
 
-  const load = useCallback(async (bypass: boolean) => {
-    const now = Date.now()
-    if (!bypass && cachedRows && now - cachedAt < CACHE_TTL_MS) {
-      setAllRows(cachedRows)
-      return
-    }
-    if (fetchingRef.current) return
-    fetchingRef.current = true
-    setIsLoading(true)
-    setError(null)
+  const load = useCallback(
+    async (bypassCache = false) => {
+      if (fetchingRef.current) return
+      fetchingRef.current = true
+      setIsLoading(true)
+      setError(null)
 
-    try {
-      const contractId = STELLAR_CONFIG.factoryContractId
-      if (!contractId) throw new Error('VITE_FACTORY_CONTRACT_ID is not configured')
+      try {
+        const contractId = STELLAR_CONFIG.factoryContractId
+        if (!contractId) throw new Error('VITE_FACTORY_CONTRACT_ID is not configured')
 
-      // Collect token addresses from events (token_created events carry the address)
-      const { events } = await stellarService.getContractEvents(contractId, 200)
-      const addresses = [
-        ...new Set(
-          events
-            .filter((e) => e.type === 'token_created')
-            .map((e) => e.data.tokenAddress)
-            .filter((a): a is string => !!a),
-        ),
-      ]
+        // 1. Get total token count via get_state()
+        const state = await stellarService.getFactoryState()
+        const count = state.tokenCount
+        setTotalCount(count)
 
-      const results = await Promise.allSettled(
-        addresses.map((addr) => stellarService.getTokenInfo(addr)),
-      )
+        if (count === 0) {
+          setAllRows([])
+          return
+        }
 
-      const rows: TokenRow[] = results
-        .map((r, i) => (r.status === 'fulfilled' ? { ...r.value, address: addresses[i] } : null))
-        .filter((r): r is TokenRow => r !== null)
+        // 2. Build index→address map from token_created events
+        //    The contract emits: (token_address, creator, index)
+        const { events } = await stellarService.getContractEvents(contractId, 200)
+        const indexToAddress = new Map<number, string>()
+        for (const e of events) {
+          if (e.type === 'token_created' && e.data.tokenAddress) {
+            // index is stored in data — fall back to position if missing
+            const idx = e.data.index !== undefined ? Number(e.data.index) : -1
+            if (idx >= 0) indexToAddress.set(idx, e.data.tokenAddress)
+          }
+        }
 
-      cachedRows = rows
-      cachedAt = Date.now()
-      setAllRows(rows)
-      setPageRaw(1)
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)))
-    } finally {
-      setIsLoading(false)
-      fetchingRef.current = false
-    }
-  }, [])
+        // 3. Fetch token info by index for all tokens (Promise.all for parallelism)
+        //    Indices are 1-based in the contract (incremented before storing)
+        const indices = Array.from({ length: count }, (_, i) => i + 1)
+        const results = await Promise.allSettled(
+          indices.map((i) => stellarService.getTokenInfo(i)),
+        )
+
+        const rows: TokenRow[] = results
+          .map((r, i) => {
+            if (r.status !== 'fulfilled') return null
+            const info = r.value
+            const address = indexToAddress.get(indices[i]) ?? ''
+            if (!address) return null
+            return { ...info, address } as TokenRow
+          })
+          .filter((r): r is TokenRow => r !== null)
+
+        setAllRows(rows)
+        if (bypassCache) setPageRaw(1)
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)))
+      } finally {
+        setIsLoading(false)
+        fetchingRef.current = false
+      }
+    },
+    [stellarService],
+  )
 
   useEffect(() => {
-    load(false)
-  }, [load])
+    if (wallet.isConnected) load()
+  }, [load, wallet.isConnected])
 
-  const refresh = useCallback(() => {
-    cachedRows = null
-    refetch()
-    load(true)
-  }, [load, refetch])
+  const refresh = useCallback(() => load(true), [load])
 
   const start = (page - 1) * PAGE_SIZE
   const rows = allRows.slice(start, start + PAGE_SIZE)
 
   return {
     rows,
-    isLoading: stateLoading || isLoading,
-    error: stateError ?? error,
+    isLoading,
+    error,
     page,
     totalPages,
     totalCount,
