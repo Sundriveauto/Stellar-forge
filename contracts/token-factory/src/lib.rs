@@ -67,10 +67,27 @@ pub enum Error {
     ArithmeticOverflow = 12,
     /// Storage read failed - contract state not found
     StateNotFound = 13,
+    /// Invalid token parameters (e.g. negative supply, invalid name/symbol)
+    InvalidTokenParams = 14,
 }
 
 #[contract]
 pub struct TokenFactory;
+
+// ── TTL constants ─────────────────────────────────────────────────────────────
+//
+// Soroban persistent storage entries expire after their TTL (time-to-live)
+// lapses. We extend TTL on every write so that active contract state never
+// becomes inaccessible under normal usage patterns.
+//
+// Ledger cadence on Stellar is ~5 seconds, so:
+//   MIN_TTL = 100_000 ledgers ≈ ~6 days   (minimum acceptable TTL before extension)
+//   MAX_TTL = 535_000 ledgers ≈ ~31 days  (target TTL after extension)
+//
+// These values align with Soroban's recommended persistent-storage strategy:
+// extend whenever the remaining TTL drops below MIN_TTL, pushing it out to MAX_TTL.
+const MIN_TTL: u32 = 100_000;
+const MAX_TTL: u32 = 535_000;
 
 #[contractimpl]
 impl TokenFactory {
@@ -97,6 +114,7 @@ impl TokenFactory {
         };
         env.storage().instance().set(&symbol_short!("state"), &state);
         env.storage().instance().set(&symbol_short!("init"), &true);
+        env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
         env.events().publish((symbol_short!("init"),), (admin,));
         Ok(())
     }
@@ -107,6 +125,15 @@ impl TokenFactory {
 
     fn save_state(env: &Env, state: &FactoryState) {
         env.storage().instance().set(&symbol_short!("state"), state);
+        // Extend instance TTL on every state write so the contract never expires.
+        env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
+    }
+
+    /// Extend TTL for all per-token storage keys associated with `token_address`
+    /// and `index`. Called after any write that touches token-specific entries.
+    fn extend_token_ttl(env: &Env, token_address: &Address, index: u32) {
+        env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
+        let _ = (token_address, index); // keys live in instance storage; one call covers all
     }
 
     fn require_not_paused(env: &Env) -> Result<(), Error> {
@@ -126,7 +153,7 @@ impl TokenFactory {
         name: String,
         symbol: String,
         decimals: u32,
-        initial_supply: i128,
+        initial_supply: u128,
         fee_payment: i128,
     ) -> Result<Address, Error> {
         Self::require_not_paused(&env)?;
@@ -158,23 +185,26 @@ impl TokenFactory {
         name: String,
         symbol: String,
         decimals: u32,
-        initial_supply: i128,
+        initial_supply: u128,
         fee_payment: i128,
         state: &mut FactoryState,
     ) -> Result<Address, Error> {
         // Validate token name: non-empty and at most 32 characters
         if name.len() == 0 || name.len() > 32 {
-            return Err(Error::InvalidParameters);
+            return Err(Error::InvalidTokenParams);
         }
 
         // Validate token symbol: non-empty and at most 12 characters
         if symbol.len() == 0 || symbol.len() > 12 {
-            return Err(Error::InvalidParameters);
+            return Err(Error::InvalidTokenParams);
         }
 
         if fee_payment < state.base_fee {
             return Err(Error::InsufficientFee);
         }
+
+        // Fail fast if token count would overflow
+        state.token_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
 
         // Transfer fee to treasury using the stored fee token
         token::TokenClient::new(env, &state.fee_token).transfer(
@@ -199,13 +229,14 @@ impl TokenFactory {
 
         // Mint initial supply to creator if requested
         if initial_supply > 0 {
-            token::StellarAssetClient::new(env, &token_address).mint(&creator, &initial_supply);
+            token::StellarAssetClient::new(env, &token_address).mint(
+                &creator,
+                &(initial_supply as i128),
+            );
         }
 
-        // Increment token_count with overflow check
-        let new_count = state.token_count.checked_add(1)
-            .ok_or(Error::ArithmeticOverflow)?;
-        state.token_count = new_count;
+        // Increment token_count (already checked for overflow above)
+        state.token_count = state.token_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
         let index = state.token_count;
 
         env.storage().instance().set(&index, &TokenInfo {
@@ -226,8 +257,14 @@ impl TokenFactory {
         list.push_back(index);
         env.storage().instance().set(&creator_key, &list);
 
-        // Store reverse mapping: token_address -> index (for burn_enabled lookup)
+        // Store direct mapping: token_address -> creator (for security checks)
+        env.storage().instance().set(&(&token_address, symbol_short!("owner")), &creator);
+
+        // Store reverse mapping: token_address -> index (for other lookups if needed)
         env.storage().instance().set(&(&token_address, symbol_short!("idx")), &index);
+
+        // Extend TTL for all token-related storage entries written above.
+        Self::extend_token_ttl(env, &token_address, index);
 
         env.events()
             .publish((symbol_short!("created"),), (token_address.clone(), creator, index));
@@ -250,22 +287,11 @@ impl TokenFactory {
             return Err(Error::InsufficientFee);
         }
 
-        // Fetch TokenInfo to verify creator authorization
-        let idx_key = (&token_address, symbol_short!("idx"));
-        let index: u32 = env
-            .storage()
-            .instance()
-            .get(&idx_key)
+        // Verify admin is the token creator using direct mapping
+        let creator: Address = env.storage().instance().get(&(&token_address, symbol_short!("owner")))
             .ok_or(Error::TokenNotFound)?;
-
-        let token_info: TokenInfo = env
-            .storage()
-            .instance()
-            .get(&index)
-            .ok_or(Error::TokenNotFound)?;
-
-        // Verify admin is the token creator
-        if token_info.creator != admin {
+        
+        if creator != admin {
             return Err(Error::Unauthorized);
         }
 
@@ -284,6 +310,9 @@ impl TokenFactory {
             .instance()
             .set(&(&token_address, symbol_short!("meta")), &metadata_uri);
 
+        // Extend TTL so the metadata entry remains accessible.
+        env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
+
         env.events()
             .publish((symbol_short!("meta"),), (token_address, metadata_uri));
         Ok(())
@@ -300,7 +329,7 @@ impl TokenFactory {
         Self::require_not_paused(&env)?;
         admin.require_auth();
 
-        // Validate mint amount is positive and doesn't overflow
+        // Validate mint amount is positive
         if amount <= 0 {
             return Err(Error::InvalidParameters);
         }
@@ -311,22 +340,11 @@ impl TokenFactory {
             return Err(Error::InsufficientFee);
         }
 
-        // Fetch TokenInfo to verify creator authorization
-        let idx_key = (&token_address, symbol_short!("idx"));
-        let index: u32 = env
-            .storage()
-            .instance()
-            .get(&idx_key)
+        // Verify admin is the token creator using direct mapping
+        let creator: Address = env.storage().instance().get(&(&token_address, symbol_short!("owner")))
             .ok_or(Error::TokenNotFound)?;
-
-        let token_info: TokenInfo = env
-            .storage()
-            .instance()
-            .get(&index)
-            .ok_or(Error::TokenNotFound)?;
-
-        // Verify admin is the token creator
-        if token_info.creator != admin {
+        
+        if creator != admin {
             return Err(Error::Unauthorized);
         }
 
@@ -386,6 +404,14 @@ impl TokenFactory {
     ) -> Result<(), Error> {
         admin.require_auth();
 
+        // Verify admin is the token creator using direct mapping
+        let creator: Address = env.storage().instance().get(&(&token_address, symbol_short!("owner")))
+            .ok_or(Error::TokenNotFound)?;
+        
+        if creator != admin {
+            return Err(Error::Unauthorized);
+        }
+
         let idx_key = (&token_address, symbol_short!("idx"));
         let index: u32 = env
             .storage()
@@ -395,12 +421,10 @@ impl TokenFactory {
 
         let mut info: TokenInfo = env.storage().instance().get(&index).ok_or(Error::TokenNotFound)?;
 
-        if info.creator != admin {
-            return Err(Error::Unauthorized);
-        }
-
         info.burn_enabled = enabled;
         env.storage().instance().set(&index, &info);
+        // Extend TTL so the updated token info remains accessible.
+        env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
         Ok(())
     }
 

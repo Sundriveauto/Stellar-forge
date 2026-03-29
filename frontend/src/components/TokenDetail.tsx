@@ -1,31 +1,36 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { useStellarContext } from '../context/StellarContext'
 import { useNetwork } from '../context/NetworkContext'
+import { useToast } from '../context/ToastContext'
+import { useWallet } from '../hooks/useWallet'
 import { ipfsService } from '../services/ipfs'
-import {
-  stellarExplorerUrl,
-  ipfsToGatewayUrl,
-  formatAddress,
-  formatTimestamp,
-} from '../utils/formatting'
+import { stellarExplorerUrl, ipfsToGatewayUrl, formatAddress } from '../utils/formatting'
 import { isValidContractAddress } from '../utils/validation'
 import type { TokenInfo, IPFSMetadata } from '../types'
+import { Card, Button, Spinner } from './UI'
 import { CopyButton } from './CopyButton'
-import { Card } from './UI/Card'
-import { Button } from './UI/Button'
-import { Spinner } from './UI/Spinner'
 import { QRCodeModal } from './UI/QRCodeModal'
+import { ShareButton } from './ShareButton'
 import { MintForm } from './MintForm'
 import { BurnForm } from './BurnForm'
 import { SetMetadataForm } from './SetMetadataForm'
-import { useToast } from '../context/ToastContext'
-import { ShareButton } from './ShareButton'
+
+const BASE_URL = 'https://stellarforge.app'
 
 type ActivePanel = 'mint' | 'burn' | 'metadata' | null
 
 const BASE_URL = 'https://stellarforge.app'
+
+function setMeta(property: string, content: string) {
+  let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`)
+  if (!el) {
+    el = document.createElement('meta')
+    el.setAttribute('property', property)
+    document.head.appendChild(el)
+  }
+  el.setAttribute('content', content)
+}
 
 function setMeta(property: string, content: string) {
   let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`)
@@ -43,6 +48,7 @@ export const TokenDetail: React.FC = () => {
   const { address } = useParams<{ address: string }>()
   const { addToast } = useToast()
   const { network } = useNetwork()
+  const { wallet } = useWallet()
 
   const [token, setToken] = useState<TokenInfo | null>(null)
   const [metadata, setMetadata] = useState<IPFSMetadata | null>(null)
@@ -51,6 +57,8 @@ export const TokenDetail: React.FC = () => {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null)
   const [showQR, setShowQR] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const isCreator = token?.creator && wallet.address && token.creator === wallet.address
 
   useEffect(() => {
     if (!address || !isValidContractAddress(address)) {
@@ -83,43 +91,6 @@ export const TokenDetail: React.FC = () => {
       .finally(() => setLoading(false))
   }, [address, stellarService, t])
 
-  const handleSetMetadata = async (_addr: string, uri: string) => {
-    addToast(t('setMetadata.success'), 'success')
-    if (token) setToken({ ...token, metadataUri: uri })
-    setActivePanel(null)
-  }
-
-  const togglePanel = (panel: ActivePanel) =>
-    setActivePanel((prev: ActivePanel) => (prev === panel ? null : panel))
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center py-20" aria-live="polite">
-        <Spinner size="lg" label={t('tokenDetail.loading', { address: formatAddress(address || '') })} />
-      </div>
-    )
-  }
-
-  if (notFound || !token) {
-    return (
-      <div className="text-center py-20 space-y-4" role="alert">
-        <p className="text-2xl font-semibold text-gray-700 dark:text-gray-300">
-          {t('tokenDetail.loadError')}
-        </p>
-        <p className="text-gray-500 dark:text-gray-400 text-sm break-all">
-          No token found at address: <span className="font-mono">{address}</span>
-        </p>
-        <Link to="/tokens">
-          <Button variant="outline" size="sm">
-            {t('nav.tokens')}
-          </Button>
-        </Link>
-      </div>
-    )
-  }
-
-  const imageUrl = metadata?.image ? ipfsToGatewayUrl(metadata.image) : null
-
   // Inject Open Graph meta tags for rich link previews
   useEffect(() => {
     if (!token || !address) return
@@ -144,6 +115,41 @@ export const TokenDetail: React.FC = () => {
     }
   }, [token, address])
 
+  const handleSetMetadata = async (_addr: string, uri: string) => {
+    addToast(`Metadata URI set: ${uri}`, 'success')
+    if (token) setToken({ ...token, metadataUri: uri })
+    setActivePanel(null)
+  }
+
+  const togglePanel = (panel: ActivePanel) =>
+    setActivePanel((prev) => (prev === panel ? null : panel))
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20" aria-live="polite">
+        <Spinner size="lg" label={t('tokenDetail.loading', { address: formatAddress(address || '') })} />
+      </div>
+    )
+  }
+
+  if (notFound || !token) {
+    return (
+      <div className="text-center py-20 space-y-4" role="alert">
+        <p className="text-2xl font-semibold text-gray-700 dark:text-gray-300">
+          {t('tokenDetail.loadError')}
+        </p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm break-all">
+          No token found at address: <span className="font-mono">{address}</span>
+        </p>
+        <Link to="/tokens">
+          <Button variant="outline" size="sm">Back to Dashboard</Button>
+        </Link>
+      </div>
+    )
+  }
+
+  const imageUrl = metadata?.image ? ipfsToGatewayUrl(metadata.image) : null
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between">
@@ -153,7 +159,7 @@ export const TokenDetail: React.FC = () => {
             ({token.symbol})
           </span>
         </h2>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {address && (
             <ShareButton
               tokenAddress={address}
@@ -162,9 +168,7 @@ export const TokenDetail: React.FC = () => {
             />
           )}
           <Link to="/tokens">
-            <Button variant="outline" size="sm">
-              ← {t('nav.tokens')}
-            </Button>
+            <Button variant="outline" size="sm">← Back</Button>
           </Link>
         </div>
       </div>
@@ -175,21 +179,20 @@ export const TokenDetail: React.FC = () => {
           <div>
             <dt className="text-gray-500 dark:text-gray-400">{t('transactionHistory.dataLabels.token')}</dt>
             <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
-              <a
-                href={stellarExplorerUrl('contract', address!, network)}
-                target="_blank"
-                rel="noopener noreferrer"
+              <ExplorerLink
+                type="contract"
+                value={address!}
+                network={network}
+                label="View on Stellar Expert"
+                ariaLabel={`View contract ${address} on Stellar Expert`}
                 className="text-indigo-500 hover:underline"
-                title={address}
-              >
-                {formatAddress(address!)}
-              </a>
+              />
               <CopyButton value={address!} ariaLabel="Copy token address" />
             </dd>
           </div>
           <div>
-            <dt className="text-gray-500 dark:text-gray-400">{t('tokenForm.initialSupply')}</dt>
-            <dd className="text-gray-900 dark:text-gray-100 mt-1">{token.totalSupply}</dd>
+            <dt className="text-gray-500 dark:text-gray-400">Total Supply</dt>
+            <dd className="text-gray-900 dark:text-gray-100 mt-1">{token.totalSupply ?? '—'}</dd>
           </div>
           <div>
             <dt className="text-gray-500 dark:text-gray-400">{t('tokenForm.decimals')}</dt>
@@ -199,29 +202,29 @@ export const TokenDetail: React.FC = () => {
             <dt className="text-gray-500 dark:text-gray-400">{t('transactionHistory.dataLabels.creator')}</dt>
             <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
               {token.creator ? (
-                <a
-                  href={stellarExplorerUrl('account', token.creator, network)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <ExplorerLink
+                  type="account"
+                  value={token.creator}
+                  network={network}
+                  label="View on Stellar Expert"
+                  ariaLabel={`View account ${token.creator} on Stellar Expert`}
                   className="text-indigo-500 hover:underline"
                   title={token.creator}
                 >
                   {formatAddress(token.creator)}
                 </a>
-              ) : (
-                '—'
-              )}
+              ) : '—'}
             </dd>
           </div>
-          {token.createdAt && (
+          {token.createdAt ? (
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Created</dt>
               <dd className="text-gray-900 dark:text-gray-100 mt-1">
                 {formatTimestamp(token.createdAt)}
               </dd>
             </div>
-          )}
-          {token.metadataUri && (
+          ) : null}
+          {token.metadataUri ? (
             <div className="sm:col-span-2">
               <dt className="text-gray-500 dark:text-gray-400">{t('setMetadata.metadataUri')}</dt>
               <dd className="flex items-center gap-1 font-mono text-xs break-all text-gray-900 dark:text-gray-100 mt-1">
@@ -229,7 +232,7 @@ export const TokenDetail: React.FC = () => {
                 <CopyButton value={token.metadataUri} ariaLabel="Copy metadata URI" />
               </dd>
             </div>
-          )}
+          ) : null}
         </dl>
       </Card>
 
@@ -241,9 +244,7 @@ export const TokenDetail: React.FC = () => {
                 src={imageUrl}
                 alt={`${token.name} token art`}
                 className="w-24 h-24 rounded-lg object-cover flex-shrink-0 border border-gray-200 dark:border-gray-700"
-                onError={(e) => {
-                  ;(e.target as HTMLImageElement).style.display = 'none'
-                }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             )}
             <div className="space-y-1 text-sm">
@@ -259,16 +260,24 @@ export const TokenDetail: React.FC = () => {
       )}
 
       <div className="flex flex-wrap gap-3">
-        <Button onClick={() => togglePanel('mint')} variant="primary">
-          {activePanel === 'mint' ? t('burnForm.burn') : t('mintForm.mint')}
-        </Button>
-        <Button onClick={() => togglePanel('burn')} variant="secondary">
-          {activePanel === 'burn' ? t('mintForm.mint') : t('burnForm.burn')}
-        </Button>
-        {!token.metadataUri && (
-          <Button onClick={() => togglePanel('metadata')} variant="outline">
-            {activePanel === 'metadata' ? t('networkSwitcher.cancel') : t('setMetadata.submit')}
-          </Button>
+        {isCreator ? (
+          <>
+            <Button onClick={() => togglePanel('mint')} variant="primary">
+              {activePanel === 'mint' ? 'Cancel Mint' : 'Mint More'}
+            </Button>
+            <Button onClick={() => togglePanel('burn')} variant="secondary">
+              {activePanel === 'burn' ? 'Cancel Burn' : 'Burn Tokens'}
+            </Button>
+            {!token.metadataUri && (
+              <Button onClick={() => togglePanel('metadata')} variant="outline">
+                {activePanel === 'metadata' ? 'Cancel' : 'Set Metadata'}
+              </Button>
+            )}
+          </>
+        ) : (
+          <div className="text-sm text-gray-500 dark:text-gray-400 py-2">
+            Only the token creator can perform actions on this token.
+          </div>
         )}
         <Button onClick={() => setShowQR(true)} variant="outline">
           Show QR
@@ -277,20 +286,25 @@ export const TokenDetail: React.FC = () => {
 
       <QRCodeModal isOpen={showQR} address={address!} onClose={() => setShowQR(false)} />
 
-      {activePanel === 'mint' && address && (
-        <Card title={t('mintForm.mint')}>
-          <MintForm tokenAddress={address} onSuccess={() => setActivePanel(null)} />
-        </Card>
-      )}
-      {activePanel === 'burn' && address && (
-        <Card title={t('burnForm.burn')}>
-          <BurnForm tokenAddress={address} onSuccess={() => setActivePanel(null)} />
-        </Card>
-      )}
-      {activePanel === 'metadata' && address && (
-        <Card title={t('setMetadata.submit')}>
-          <SetMetadataForm tokenAddress={address} onSubmit={handleSetMetadata} />
-        </Card>
+      {/* Inline action panels - only for creator */}
+      {isCreator && (
+        <>
+          {activePanel === 'mint' && address && (
+            <Card title="Mint More Tokens">
+              <MintForm tokenAddress={address} onSuccess={() => setActivePanel(null)} />
+            </Card>
+          )}
+          {activePanel === 'burn' && address && (
+            <Card title="Burn Tokens">
+              <BurnForm tokenAddress={address} onSuccess={() => setActivePanel(null)} />
+            </Card>
+          )}
+          {activePanel === 'metadata' && address && (
+            <Card title="Set Metadata">
+              <SetMetadataForm tokenAddress={address} onSubmit={handleSetMetadata} />
+            </Card>
+          )}
+        </>
       )}
     </div>
   )

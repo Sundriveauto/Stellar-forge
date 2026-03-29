@@ -1,14 +1,16 @@
-import React from 'react'
-import { useTranslation } from 'react-i18next'
-import { useTransactionHistory } from '../hooks/useTransactionHistory'
-import { formatTimestamp } from '../utils/formatting'
+
+import React from 'react';
+import { useTransactionHistory } from '../hooks/useTransactionHistory';
+import { useNetwork } from '../context/NetworkContext';
+import { stellarExplorerUrl } from '../utils/formatting';
+import { ExplorerLink } from './ExplorerLink';
 
 interface TransactionHistoryProps {
-  publicKey?: string
-  assetCodes?: string[]
-  issuer?: string
-  contractId?: string
-  contractIds?: string[]
+  publicKey?: string;
+  contractId?: string;
+  assetCodes?: string[];
+  issuer?: string;
+  contractIds?: string[];
 }
 
 const badgeColors: Record<string, string> = {
@@ -20,19 +22,18 @@ const badgeColors: Record<string, string> = {
 }
 
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
-  publicKey,
+  publicKey = '',
+  contractId,
   assetCodes,
   issuer,
   contractId,
   contractIds,
 }) => {
-  const { t } = useTranslation()
-  const ids = contractIds || (contractId ? [contractId] : undefined)
-  
-  const { transactions, loading, error, hasMore, loadMore } = useTransactionHistory(publicKey || '', {
-    ...(assetCodes && { assetCodes }),
-    ...(issuer && { issuer }),
-    ...(ids && { contractIds: ids }),
+  const resolvedContractIds = contractId ? [contractId, ...(contractIds ?? [])] : contractIds
+  const { transactions, loading, error, hasMore, loadMore } = useTransactionHistory(publicKey, {
+    assetCodes,
+    issuer,
+    contractIds: resolvedContractIds,
     pageSize: 10,
   })
 
@@ -53,11 +54,16 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   }, [hasMore, loading, loadMore])
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-4">
-      <h2 className="text-xl font-bold mb-4 dark:text-white">{t('dashboard.recentActivity')}</h2>
-      
-      {error && <div className="text-red-600 mb-2 p-3 bg-red-50 rounded dark:bg-red-900/20 dark:text-red-400">{error}</div>}
-      
+    <div className="w-full max-w-3xl mx-auto p-4">
+      <h2 className="text-2xl font-bold mb-4">Transaction History</h2>
+      {loading && transactions.length === 0 && (
+        <div className="animate-pulse space-y-2" aria-label="Loading transactions" aria-busy="true">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-10 bg-gray-200 rounded" />
+          ))}
+        </div>
+      )}
+      {error && <div className="text-red-600 mb-2">{error}</div>}
       {!loading && transactions.length === 0 && !error && (
         <div className="text-gray-500 text-center py-8 dark:text-gray-400">
           {t('transactionHistory.noEvents')}
@@ -65,16 +71,17 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       )}
 
       {transactions.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-slate-700">
-          <table className="min-w-full bg-white dark:bg-slate-800 text-sm">
-            <thead className="bg-gray-50 dark:bg-slate-900/50">
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border rounded shadow">
+            <caption className="sr-only">Transaction history</caption>
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Type</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Token</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Amount</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Date</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Status</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Link</th>
+                <th scope="col" className="px-4 py-2">Type</th>
+                <th scope="col" className="px-4 py-2">Token</th>
+                <th scope="col" className="px-4 py-2">Amount</th>
+                <th scope="col" className="px-4 py-2">Date</th>
+                <th scope="col" className="px-4 py-2">Status</th>
+                <th scope="col" className="px-4 py-2">Link</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
@@ -99,15 +106,19 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                       {tx.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <a
-                      href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-500 underline dark:text-blue-400"
-                    >
-                      {t('transactionHistory.dataLabels.tx')}
-                    </a>
+                  <td className="px-4 py-2">
+                    <div className="inline-flex items-center gap-2">
+                      <a
+                        href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline text-sm"
+                        aria-label={`View transaction ${tx.hash} on Stellar Explorer`}
+                      >
+                        View
+                      </a>
+                      <CopyButton value={tx.hash} ariaLabel={`Copy transaction hash ${tx.hash}`} />
+                    </div>
                   </td>
                 </tr>
               ))}
