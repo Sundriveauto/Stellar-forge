@@ -13,3 +13,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// Plausible analytics global — injected via index.html script tag
+interface Window {
+  plausible?: (
+    event: string,
+    options?: { props?: Record<string, string | number | boolean>; u?: string },
+  ) => void
+}
