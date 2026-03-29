@@ -1,15 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Input, Button, ConfirmModal } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
+import { useTransaction } from '../hooks/useTransaction'
 import { useTos } from '../context/TosContext'
 import { useStellarContext } from '../context/StellarContext'
 import { useWalletContext } from '../context/WalletContext'
 import { useToast } from '../context/ToastContext'
+import { useBalanceCheck } from '../hooks/useBalanceCheck'
 import { isValidStellarAddress } from '../utils/validation'
 import type { TokenInfo } from '../types'
 
 const BASE_FEE_STROOPS = '100000' // 0.01 XLM
 const ESTIMATED_FEE_DISPLAY = '0.01 XLM'
+const ESTIMATED_FEE_XLM = 0.01
 const ADDRESS_DEBOUNCE_DELAY = 500
 
 interface MintFormProps {
@@ -25,16 +28,30 @@ export const MintForm: React.FC<MintFormProps> = ({
   const { wallet } = useWalletContext()
   const { addToast } = useToast()
   const { requireTos } = useTos()
+  const { hasSufficientBalance, shortfall, isTestnet } = useBalanceCheck(ESTIMATED_FEE_XLM)
 
   const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [recipient, setRecipient] = useState('')
   const [amount, setAmount] = useState('')
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
   const [pending, setPending] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [recipientHasAccount, setRecipientHasAccount] = useState<boolean | null>(null)
   const [recipientValidationError, setRecipientValidationError] = useState<string | null>(null)
   const [isCheckingRecipient, setIsCheckingRecipient] = useState(false)
+
+  const mintBuilder = useCallback(
+    () =>
+      stellarService.mintTokens({
+        tokenAddress,
+        to: recipient,
+        amount,
+        feePayment: BASE_FEE_STROOPS,
+      }),
+    [stellarService, tokenAddress, recipient, amount],
+  )
+
+  const { execute: executeMint, status: txStatus } = useTransaction(mintBuilder)
+  const isSubmitting = txStatus === 'simulating' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'polling'
 
   const debouncedAddress = useDebounce(tokenAddress, ADDRESS_DEBOUNCE_DELAY)
   const debouncedRecipient = useDebounce(recipient, ADDRESS_DEBOUNCE_DELAY)
@@ -85,14 +102,8 @@ export const MintForm: React.FC<MintFormProps> = ({
 
   const handleConfirm = async () => {
     setPending(false)
-    setIsSubmitting(true)
     try {
-      await stellarService.mintTokens({
-        tokenAddress,
-        to: recipient,
-        amount,
-        feePayment: BASE_FEE_STROOPS,
-      })
+      await executeMint()
       addToast('Tokens minted successfully', 'success')
       setAmount('')
       setRecipient('')
@@ -100,8 +111,6 @@ export const MintForm: React.FC<MintFormProps> = ({
       onSuccess?.()
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Mint failed', 'error')
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -160,11 +169,14 @@ export const MintForm: React.FC<MintFormProps> = ({
           type="submit"
           variant="primary"
           loading={isSubmitting}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !hasSufficientBalance}
           className="w-full sm:w-auto"
         >
           Mint Tokens
         </Button>
+        {!hasSufficientBalance && (
+          <InsufficientBalanceWarning shortfall={shortfall} isTestnet={isTestnet} />
+        )}
       </form>
 
       <ConfirmModal

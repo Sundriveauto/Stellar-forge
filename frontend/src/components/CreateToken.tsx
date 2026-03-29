@@ -5,6 +5,7 @@ import { useStellarContext } from '../context/StellarContext'
 import { useWalletContext } from '../context/WalletContext'
 import { TokenForm } from './TokenForm'
 import { ShareButton } from './ShareButton'
+import { CopyButton } from './CopyButton'
 import { STELLAR_CONFIG } from '../config/stellar'
 
 interface DeployedToken {
@@ -82,9 +83,12 @@ export const CreateToken: React.FC = () => {
               <p className="font-semibold text-green-800 dark:text-green-300">
                 {deployedToken.name} (${deployedToken.symbol}) {t('tokenForm.deployedSuccessfully')}
               </p>
-              <p className="text-sm text-green-700 dark:text-green-400 mt-1 font-mono break-all">
-                {deployedToken.address}
-              </p>
+              <div className="inline-flex items-center gap-2 mt-1">
+                <p className="text-sm text-green-700 dark:text-green-400 font-mono break-all">
+                  {deployedToken.address}
+                </p>
+                <CopyButton value={deployedToken.address} ariaLabel="Copy token address" />
+              </div>
               <div className="mt-3">
                 <ShareButton
                   tokenAddress={deployedToken.address}
@@ -98,11 +102,13 @@ export const CreateToken: React.FC = () => {
       )}
 
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-        <TokenForm
-          onSubmit={handleTokenFormSubmit}
-          isLoading={isDeploying}
-          estimatedFee="0.01"
-        />
+        <ErrorBoundary>
+          <TokenForm
+            onSubmit={handleTokenFormSubmit}
+            isLoading={isDeploying}
+            estimatedFee="0.01"
+          />
+        </ErrorBoundary>
       </div>
     </div>
   )
