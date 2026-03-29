@@ -8,6 +8,7 @@
     "build-storybook": "storybook build",
     "analyze": "vite-bundle-analyzer dist",
     "build": "vite build",
+    "prebuild": "npx tsx scripts/generateCSP.ts",
     "dev": "vite",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
@@ -20,6 +21,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@sentry/react": "^10.46.0",
     "@stellar/freighter-api": "^6.0.1",
     "@tailwindcss/postcss": "^4.2.2",
     "i18next": "^25.10.9",
@@ -32,6 +34,7 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^3.2.6",
+    "@playwright/test": "^1.44.0",
     "@storybook/addon-essentials": "^8.6.12",
     "@storybook/addon-interactions": "^8.6.12",
     "@storybook/addon-links": "^8.6.12",
@@ -44,6 +47,7 @@
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.57.2",
     "@typescript-eslint/parser": "^8.57.2",
     "@vitejs/plugin-react": "^4.7.0",
@@ -51,7 +55,6 @@
     "@vitest/ui": "^4.0.18",
     "autoprefixer": "^10.4.16",
     "eslint": "^10.1.0",
-    "@playwright/test": "^1.44.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.0.1",
