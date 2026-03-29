@@ -25,6 +25,8 @@ pub struct TokenInfo {
     pub created_at: u64,
     /// Whether burning is enabled for this token. Defaults to true.
     pub burn_enabled: bool,
+    /// Optional maximum supply cap. `None` means unlimited minting.
+    pub max_supply: Option<i128>,
 }
 
 #[contracttype]
@@ -67,6 +69,8 @@ pub enum Error {
     ArithmeticOverflow = 12,
     /// Storage read failed - contract state not found
     StateNotFound = 13,
+    /// Mint would exceed the token's maximum supply cap
+    MaxSupplyExceeded = 14,
 }
 
 #[contract]
@@ -152,6 +156,7 @@ impl TokenFactory {
         symbol: String,
         decimals: u32,
         initial_supply: i128,
+        max_supply: Option<i128>,
         fee_payment: i128,
     ) -> Result<Address, Error> {
         Self::require_not_paused(&env)?;
@@ -166,7 +171,7 @@ impl TokenFactory {
         state.locked = true;
         Self::save_state(&env, &state);
 
-        let result = Self::create_token_inner(&env, creator, salt, token_wasm_hash, name, symbol, decimals, initial_supply, fee_payment, &mut state);
+        let result = Self::create_token_inner(&env, creator, salt, token_wasm_hash, name, symbol, decimals, initial_supply, max_supply, fee_payment, &mut state);
 
         // Always release the lock, regardless of success or error.
         state.locked = false;
@@ -184,6 +189,7 @@ impl TokenFactory {
         symbol: String,
         decimals: u32,
         initial_supply: i128,
+        max_supply: Option<i128>,
         fee_payment: i128,
         state: &mut FactoryState,
     ) -> Result<Address, Error> {
@@ -199,6 +205,13 @@ impl TokenFactory {
 
         if fee_payment < state.base_fee {
             return Err(Error::InsufficientFee);
+        }
+
+        // If a cap is set it must be positive and >= initial_supply
+        if let Some(cap) = max_supply {
+            if cap <= 0 || initial_supply > cap {
+                return Err(Error::InvalidParameters);
+            }
         }
 
         // Transfer fee to treasury using the stored fee token
@@ -242,6 +255,7 @@ impl TokenFactory {
             creator: creator.clone(),
             created_at: env.ledger().timestamp(),
             burn_enabled: true,
+            max_supply,
         });
 
         let creator_key = (symbol_short!("crtoks"), creator.clone());
@@ -361,6 +375,15 @@ impl TokenFactory {
         // Verify admin is the token creator
         if token_info.creator != admin {
             return Err(Error::Unauthorized);
+        }
+
+        // Enforce max supply cap if set
+        if let Some(cap) = token_info.max_supply {
+            let current = token::TokenClient::new(&env, &token_address).total_supply();
+            let new_total = current.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
+            if new_total > cap {
+                return Err(Error::MaxSupplyExceeded);
+            }
         }
 
         token::TokenClient::new(&env, &state.fee_token).transfer(
