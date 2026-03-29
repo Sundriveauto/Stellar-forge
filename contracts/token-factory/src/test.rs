@@ -4,7 +4,7 @@ use super::*;
 use soroban_sdk::{
     testutils::Address as _,
     token::{StellarAssetClient, TokenClient},
-    Address, BytesN, Env, String,
+    Address, BytesN, Env, Map, String,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -916,4 +916,119 @@ fn test_burn_at_exact_balance() {
     
     // Verify balance is now 0
     assert_eq!(token_client.balance(&user), 0);
+}
+
+// ── fee split ─────────────────────────────────────────────────────────────────
+
+fn make_split(s: &Setup, pairs: &[(&Address, u32)]) -> Map<Address, u32> {
+    let mut m = Map::new(&s.env);
+    for (addr, bps) in pairs {
+        m.set((*addr).clone(), *bps);
+    }
+    m
+}
+
+#[test]
+fn test_set_fee_split_valid() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&recipient, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let stored = s.client.get_fee_split();
+    assert_eq!(stored.get(s.treasury.clone()).unwrap(), 7_000);
+    assert_eq!(stored.get(recipient).unwrap(), 3_000);
+}
+
+#[test]
+fn test_set_fee_split_invalid_sum_rejected() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    // 6_000 + 3_000 = 9_000 ≠ 10_000
+    let splits = make_split(&s, &[(&s.treasury, 6_000), (&recipient, 3_000)]);
+    assert_eq!(
+        s.client.try_set_fee_split(&s.admin, &splits),
+        Err(Ok(Error::InvalidFeeSplit))
+    );
+}
+
+#[test]
+fn test_set_fee_split_unauthorized() {
+    let s = Setup::new();
+    let stranger = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 10_000)]);
+    assert_eq!(
+        s.client.try_set_fee_split(&stranger, &splits),
+        Err(Ok(Error::Unauthorized))
+    );
+}
+
+#[test]
+fn test_set_fee_split_empty_clears_split() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&recipient, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    // Clear by passing empty map
+    s.client.set_fee_split(&s.admin, &Map::new(&s.env));
+    assert!(s.client.get_fee_split().is_empty());
+}
+
+#[test]
+fn test_fee_distributed_according_to_split() {
+    let s = Setup::new();
+    let referral = Address::generate(&s.env);
+    // 70% treasury, 30% referral
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&referral, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 1_000);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &100, &1_000);
+
+    // 1_000 * 7_000 / 10_000 = 700 to treasury
+    // 1_000 * 3_000 / 10_000 = 300 to referral
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 700);
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&referral), 300);
+}
+
+#[test]
+fn test_fee_goes_to_treasury_when_no_split_set() {
+    let s = Setup::new();
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 1_000);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &100, &1_000);
+
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 1_000);
+}
+
+#[test]
+fn test_fee_split_remainder_goes_to_treasury() {
+    let s = Setup::new();
+    let referral = Address::generate(&s.env);
+    // 3333 + 6667 = 10_000 — with a fee of 10, referral gets 3 (3.333 truncated),
+    // treasury gets 6 (6.667 truncated) + 1 remainder = 7
+    let splits = make_split(&s, &[(&referral, 3_333), (&s.treasury, 6_667)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 10);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &1, &10);
+
+    let referral_bal = TokenClient::new(&s.env, &s.fee_token).balance(&referral);
+    let treasury_bal = TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury);
+    // Total must equal the fee paid
+    assert_eq!(referral_bal + treasury_bal, 10);
+    // Remainder goes to treasury, so treasury >= its direct share
+    assert!(treasury_bal >= 6);
 }
