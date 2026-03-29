@@ -724,6 +724,22 @@ impl TokenFactory {
         Ok(())
     }
 
+    pub fn update_admin(env: Env, current_admin: Address, new_admin: Address) -> Result<(), Error> {
+        current_admin.require_auth();
+        let mut state = Self::load_state(&env)?;
+        if state.admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        if current_admin == new_admin {
+            return Err(Error::InvalidParameters);
+        }
+        state.admin = new_admin.clone();
+        Self::save_state(&env, &state);
+        env.events()
+            .publish((symbol_short!("adm_upd"),), (current_admin, new_admin));
+        Ok(())
+    }
+
     pub fn get_state(env: Env) -> Result<FactoryState, Error> {
         Self::load_state(&env)
     }
