@@ -142,15 +142,15 @@ export const TokenCreateForm: React.FC = () => {
   return (
     <>
       {deployedToken && (
-        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 p-5">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl" aria-hidden="true">🎉</span>
+        <div className="mb-4 sm:mb-6 rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+            <span className="text-2xl shrink-0" aria-hidden="true">🎉</span>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-green-800 dark:text-green-300">
+              <p className="font-semibold text-green-800 dark:text-green-300 text-sm sm:text-base">
                 {deployedToken.name} (${deployedToken.symbol}) deployed successfully!
               </p>
-              <div className="inline-flex items-center gap-2 mt-1">
-                <p className="text-sm text-green-700 dark:text-green-400 font-mono break-all">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
+                <p className="text-xs sm:text-sm text-green-700 dark:text-green-400 font-mono break-all">
                   {deployedToken.address}
                 </p>
                 <CopyButton value={deployedToken.address} ariaLabel="Copy token address" />
@@ -168,8 +168,8 @@ export const TokenCreateForm: React.FC = () => {
       )}
 
       {isDeploying && (
-        <div className="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-5 rounded-lg">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-4">Deployment Progress</h3>
+        <div className="mb-4 sm:mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 sm:p-5 rounded-lg">
+          <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-4 text-sm sm:text-base">Deployment Progress</h3>
           <ProgressIndicator steps={deploymentSteps} />
         </div>
       )}
