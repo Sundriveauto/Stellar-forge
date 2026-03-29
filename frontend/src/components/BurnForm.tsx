@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Input, Button, ConfirmModal } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
 import { useTokenBalance } from '../hooks/useTokenBalance'
+import { useTransaction } from '../hooks/useTransaction'
 import { useWalletContext } from '../context/WalletContext'
 import { useTos } from '../context/TosContext'
 import { useStellarContext } from '../context/StellarContext'
@@ -26,7 +27,6 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   const [amount, setAmount] = useState('')
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
   const [pending, setPending] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const debouncedAddress = useDebounce(tokenAddress, 300)
 
@@ -34,6 +34,14 @@ export const BurnForm: React.FC<BurnFormProps> = ({
     debouncedAddress,
     wallet.address ?? '',
   )
+
+  const burnBuilder = useCallback(
+    () => stellarService.burnTokens({ tokenAddress, amount }),
+    [stellarService, tokenAddress, amount],
+  )
+
+  const { execute: executeBurn, status: txStatus } = useTransaction(burnBuilder)
+  const isSubmitting = txStatus === 'simulating' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'polling'
 
   useEffect(() => {
     if (!debouncedAddress) { setTokenInfo(null); return }
@@ -55,20 +63,14 @@ export const BurnForm: React.FC<BurnFormProps> = ({
 
   const handleConfirm = async () => {
     setPending(false)
-    setIsSubmitting(true)
     try {
-      await stellarService.burnTokens({
-        tokenAddress,
-        amount,
-      })
+      await executeBurn()
       addToast('Tokens burned successfully', 'success')
       setAmount('')
       refreshBalance()
       onSuccess?.()
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Burn failed', 'error')
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
