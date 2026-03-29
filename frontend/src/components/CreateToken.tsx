@@ -5,6 +5,7 @@ import { useStellarContext } from '../context/StellarContext'
 import { useWalletContext } from '../context/WalletContext'
 import { TokenForm } from './TokenForm'
 import { ShareButton } from './ShareButton'
+import ErrorBoundary from './ErrorBoundary'
 import { STELLAR_CONFIG } from '../config/stellar'
 
 interface DeployedToken {
@@ -98,11 +99,13 @@ export const CreateToken: React.FC = () => {
       )}
 
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-        <TokenForm
-          onSubmit={handleTokenFormSubmit}
-          isLoading={isDeploying}
-          estimatedFee="0.01"
-        />
+        <ErrorBoundary>
+          <TokenForm
+            onSubmit={handleTokenFormSubmit}
+            isLoading={isDeploying}
+            estimatedFee="0.01"
+          />
+        </ErrorBoundary>
       </div>
     </div>
   )

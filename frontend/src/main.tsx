@@ -4,6 +4,7 @@ import './index.css'
 import './i18n'
 import App from './App.tsx'
 import { MisconfigurationScreen } from './components/MisconfigurationScreen.tsx'
+import ErrorBoundary from './components/ErrorBoundary.tsx'
 import { validateEnv } from './utils/envValidation.ts'
 import { parseContractError } from './utils/contractErrors.ts'
 
@@ -18,6 +19,8 @@ window.addEventListener('unhandledrejection', (event) => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {valid ? <App /> : <MisconfigurationScreen missing={missing} />}
+    <ErrorBoundary>
+      {valid ? <App /> : <MisconfigurationScreen missing={missing} />}
+    </ErrorBoundary>
   </StrictMode>,
 )
