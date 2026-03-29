@@ -52,7 +52,7 @@ export const NavBar: React.FC<NavBarProps> = ({ onHelpClick, isAdmin = false }) 
             className="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-slate-700 ml-auto"
             aria-label="Open tutorial"
           >
-            ? Help
+            ? {t('nav.help')}
           </button>
         )}
       </div>

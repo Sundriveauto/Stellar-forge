@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { Input, Button, MainnetConfirmationModal, ConfirmModal, ProgressIndicator, InsufficientBalanceWarning } from './UI'
+import { useState, useCallback, useRef } from 'react'
+import { Input, Button, MainnetConfirmationModal, ConfirmModal, ProgressIndicator } from './UI'
 import type { ProgressStep } from './UI'
 import { useMainnetConfirmation } from '../hooks/useMainnetConfirmation'
 import { useToast } from '../context/ToastContext'
 import { useTos } from '../context/TosContext'
 import { useWalletContext } from '../context/WalletContext'
 import { useStellarContext } from '../context/StellarContext'
-import { useBalanceCheck } from '../hooks/useBalanceCheck'
+import { useTransaction } from '../hooks/useTransaction'
 import { TokenDeployParams } from '../types'
 import { STELLAR_CONFIG } from '../config/stellar'
 import {
@@ -16,6 +16,7 @@ import {
   sanitizeTokenInput,
 } from '../utils/validation'
 import { ShareButton } from './ShareButton'
+import { CopyButton } from './CopyButton'
 import { useTranslation } from 'react-i18next'
 
 const ESTIMATED_FEE = '0.01' // XLM
@@ -29,7 +30,6 @@ export const TokenCreateForm: React.FC = () => {
   const [decimals, setDecimals] = useState('7')
   const [initialSupply, setInitialSupply] = useState('')
   const [description, setDescription] = useState('')
-  const [isDeploying, setIsDeploying] = useState(false)
   const [deployedToken, setDeployedToken] = useState<{ address: string; name: string; symbol: string } | null>(null)
   const [pendingParams, setPendingParams] = useState<TokenDeployParams | null>(null)
   const [deploymentSteps, setDeploymentSteps] = useState<ProgressStep[]>([
@@ -45,6 +45,21 @@ export const TokenCreateForm: React.FC = () => {
   const { t } = useTranslation()
   const { hasSufficientBalance, shortfall, isTestnet } = useBalanceCheck(ESTIMATED_FEE_XLM)
 
+  // Use a ref so the builder always sees the latest params without re-creating the hook
+  const paramsRef = useRef<TokenDeployParams | null>(null)
+
+  const builder = useCallback(
+    () => stellarService.deployToken(paramsRef.current!),
+    [stellarService],
+  )
+
+  const { execute, status: txStatus, reset: resetTx } = useTransaction(builder)
+  const isDeploying =
+    txStatus === 'simulating' ||
+    txStatus === 'signing' ||
+    txStatus === 'submitting' ||
+    txStatus === 'polling'
+
   const updateStep = (index: number, status: ProgressStep['status']) => {
     setDeploymentSteps((prev) => {
       const updated = [...prev]
@@ -56,7 +71,6 @@ export const TokenCreateForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Sanitize inputs by trimming whitespace
     const sanitizedName = sanitizeTokenInput(name)
     const sanitizedSymbol = sanitizeTokenInput(symbol)
     const sanitizedDescription = sanitizeTokenInput(description)
@@ -81,8 +95,8 @@ export const TokenCreateForm: React.FC = () => {
       initialSupply,
       salt:
         Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
-      tokenWasmHash: STELLAR_CONFIG.factoryContractId, // Placeholder or actual hash
-      feePayment: '100000', // Default fee
+      tokenWasmHash: STELLAR_CONFIG.factoryContractId,
+      feePayment: '100000',
       ...(sanitizedDescription && {
         metadata: { description: sanitizedDescription, image: new File([], '') },
       }),
@@ -99,7 +113,8 @@ export const TokenCreateForm: React.FC = () => {
   }
 
   const deployToken = async (params: TokenDeployParams) => {
-    setIsDeploying(true)
+    paramsRef.current = params
+    resetTx()
     setDeploymentSteps([
       { label: 'Deploy contract', status: 'in-progress' },
       { label: 'Upload metadata to IPFS', status: 'pending' },
@@ -107,29 +122,20 @@ export const TokenCreateForm: React.FC = () => {
     ])
 
     try {
-      const result = (await stellarService.deployToken(params)) as { success: boolean }
-      if (result.success) {
-        updateStep(0, 'completed')
-        updateStep(1, 'completed')
-        updateStep(2, 'completed')
-        addToast('Token deployed successfully!', 'success')
-        setName('')
-        setSymbol('')
-        setDecimals('7')
-        setInitialSupply('')
-        setDescription('')
-        // Refresh balance after successful transaction
-        await refreshBalance()
-      } else {
-        updateStep(0, 'error')
-        addToast(t('tokenForm.deployFailed'), 'error')
-      }
-    } catch (error: unknown) {
-      console.error('Deployment error:', error)
+      await execute()
+      updateStep(0, 'completed')
+      updateStep(1, 'completed')
+      updateStep(2, 'completed')
+      addToast('Token deployed successfully!', 'success')
+      setName('')
+      setSymbol('')
+      setDecimals('7')
+      setInitialSupply('')
+      setDescription('')
+      await refreshBalance()
+    } catch (err) {
       updateStep(0, 'error')
-      addToast(t('tokenForm.deployError'), 'error')
-    } finally {
-      setIsDeploying(false)
+      addToast(err instanceof Error ? err.message : t('tokenForm.deployError'), 'error')
     }
   }
 
@@ -143,9 +149,12 @@ export const TokenCreateForm: React.FC = () => {
               <p className="font-semibold text-green-800 dark:text-green-300">
                 {deployedToken.name} (${deployedToken.symbol}) deployed successfully!
               </p>
-              <p className="text-sm text-green-700 dark:text-green-400 mt-1 font-mono break-all">
-                {deployedToken.address}
-              </p>
+              <div className="inline-flex items-center gap-2 mt-1">
+                <p className="text-sm text-green-700 dark:text-green-400 font-mono break-all">
+                  {deployedToken.address}
+                </p>
+                <CopyButton value={deployedToken.address} ariaLabel="Copy token address" />
+              </div>
               <div className="mt-3">
                 <ShareButton
                   tokenAddress={deployedToken.address}

@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react'
-import { Input, Button, ConfirmModal, InsufficientBalanceWarning } from './UI'
+import { useState, useEffect, useCallback } from 'react'
+import { Input, Button, ConfirmModal } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
 import { useTokenBalance } from '../hooks/useTokenBalance'
-import { useBalanceCheck } from '../hooks/useBalanceCheck'
+import { useTransaction } from '../hooks/useTransaction'
 import { useWalletContext } from '../context/WalletContext'
 import { useTos } from '../context/TosContext'
 import { useStellarContext } from '../context/StellarContext'
 import { useToast } from '../context/ToastContext'
 import type { TokenInfo } from '../types'
 
-const ESTIMATED_FEE_XLM = 0.01
+const ESTIMATED_FEE_DISPLAY = '0.01 XLM'
 
 interface BurnFormProps {
   tokenAddress?: string
@@ -30,7 +30,6 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   const [amount, setAmount] = useState('')
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null)
   const [pending, setPending] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const debouncedAddress = useDebounce(tokenAddress, 300)
 
@@ -38,6 +37,14 @@ export const BurnForm: React.FC<BurnFormProps> = ({
     debouncedAddress,
     wallet.address ?? '',
   )
+
+  const burnBuilder = useCallback(
+    () => stellarService.burnTokens({ tokenAddress, amount }),
+    [stellarService, tokenAddress, amount],
+  )
+
+  const { execute: executeBurn, status: txStatus } = useTransaction(burnBuilder)
+  const isSubmitting = txStatus === 'simulating' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'polling'
 
   useEffect(() => {
     if (!debouncedAddress) { setTokenInfo(null); return }
@@ -50,7 +57,7 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   const amountExceedsBalance =
     !!amount && !!balance && BigInt(balance) > 0n && BigInt(amount) > BigInt(balance)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!wallet.isConnected) { addToast('Connect your wallet first', 'error'); return }
     if (amountExceedsBalance) return
@@ -59,20 +66,14 @@ export const BurnForm: React.FC<BurnFormProps> = ({
 
   const handleConfirm = async () => {
     setPending(false)
-    setIsSubmitting(true)
     try {
-      await stellarService.burnTokens({
-        tokenAddress,
-        amount,
-      })
+      await executeBurn()
       addToast('Tokens burned successfully', 'success')
       setAmount('')
       refreshBalance()
       onSuccess?.()
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Burn failed', 'error')
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -136,6 +137,7 @@ export const BurnForm: React.FC<BurnFormProps> = ({
           },
           { label: 'Amount to Burn', value: amount },
           { label: 'Your Balance', value: balance },
+          { label: 'Estimated Fee', value: ESTIMATED_FEE_DISPLAY },
         ]}
         onConfirm={handleConfirm}
         onCancel={() => setPending(false)}

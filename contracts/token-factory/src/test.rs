@@ -4,7 +4,7 @@ use super::*;
 use soroban_sdk::{
     testutils::Address as _,
     token::{StellarAssetClient, TokenClient},
-    Address, BytesN, Env, String,
+    Address, BytesN, Env, Map, String,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -89,6 +89,7 @@ fn test_create_token() {
         creator: creator.clone(),
         created_at: 0,
         burn_enabled: true,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
@@ -119,7 +120,7 @@ fn test_create_token_insufficient_fee() {
         &creator, &s.salt(0), &s.dummy_hash(),
         &String::from_str(&s.env, "MyToken"),
         &String::from_str(&s.env, "MTK"),
-        &7, &0, &999,
+        &7, &0_u128, &999,
     );
     assert_eq!(result, Err(Ok(Error::InsufficientFee)));
 }
@@ -135,7 +136,7 @@ fn test_create_token_blocked_when_paused() {
         &creator, &s.salt(0), &s.dummy_hash(),
         &String::from_str(&s.env, "T"),
         &String::from_str(&s.env, "T"),
-        &7, &0, &1_000,
+        &7, &0_u128, &1_000,
     );
     assert_eq!(result, Err(Ok(Error::ContractPaused)));
 }
@@ -237,6 +238,7 @@ fn test_set_metadata_unauthorized() {
         creator: creator.clone(),
         created_at: 0,
         burn_enabled: true,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
@@ -247,6 +249,8 @@ fn test_set_metadata_unauthorized() {
         s.env.storage().instance().set(&symbol_short!("state"), &state);
         s.env.storage().instance()
             .set(&(&token_addr, symbol_short!("idx")), &index);
+        s.env.storage().instance()
+            .set(&(&token_addr, symbol_short!("owner")), &creator);
     });
 
     // Unauthorized user should not be able to set metadata
@@ -292,6 +296,7 @@ fn test_mint_tokens_unauthorized() {
         creator: creator.clone(),
         created_at: 0,
         burn_enabled: true,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
@@ -302,6 +307,8 @@ fn test_mint_tokens_unauthorized() {
         s.env.storage().instance().set(&symbol_short!("state"), &state);
         s.env.storage().instance()
             .set(&(&token_addr, symbol_short!("idx")), &index);
+        s.env.storage().instance()
+            .set(&(&token_addr, symbol_short!("owner")), &creator);
     });
 
     // Unauthorized user should not be able to mint tokens
@@ -323,6 +330,7 @@ fn seed_token_with_burn(s: &Setup, creator: &Address, burn_enabled: bool) -> Add
         creator: creator.clone(),
         created_at: 0,
         burn_enabled,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
@@ -333,6 +341,8 @@ fn seed_token_with_burn(s: &Setup, creator: &Address, burn_enabled: bool) -> Add
         s.env.storage().instance().set(&symbol_short!("state"), &state);
         s.env.storage().instance()
             .set(&(&token_addr, symbol_short!("idx")), &index);
+        s.env.storage().instance()
+            .set(&(&token_addr, symbol_short!("owner")), &creator);
     });
     token_addr
 }
@@ -466,6 +476,7 @@ fn test_get_token_info() {
         creator: creator.clone(),
         created_at: 0,
         burn_enabled: true,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         s.env.storage().instance().set(&1u32, &info);
@@ -552,7 +563,7 @@ fn test_reentrancy_guard_blocks_concurrent_call() {
         &creator, &s.salt(0), &s.dummy_hash(),
         &String::from_str(&s.env, "T"),
         &String::from_str(&s.env, "T"),
-        &7, &0, &1_000,
+        &7, &0_u128, &1_000,
     );
     assert_eq!(result, Err(Ok(Error::Reentrancy)));
 }
@@ -567,7 +578,7 @@ fn test_reentrancy_guard_released_after_error() {
         &creator, &s.salt(0), &s.dummy_hash(),
         &String::from_str(&s.env, "T"),
         &String::from_str(&s.env, "T"),
-        &7, &0, &1, // fee too low → InsufficientFee
+        &7, &0_u128, &1, // fee too low → InsufficientFee
     );
 
     // After the failed call, locked must be false
@@ -643,7 +654,102 @@ fn test_get_tokens_by_creator_empty_for_unknown() {
     assert_eq!(s.client.get_tokens_by_creator(&stranger).len(), 0);
 }
 
-// ── arithmetic overflow protection ────────────────────────────────────────────
+// ── max supply cap ────────────────────────────────────────────────────────────
+
+fn seed_token_with_cap(s: &Setup, creator: &Address, max_supply: Option<i128>) -> Address {
+    let token_addr = s.new_token(creator);
+    let info = TokenInfo {
+        name: String::from_str(&s.env, "T"),
+        symbol: String::from_str(&s.env, "T"),
+        decimals: 7,
+        creator: creator.clone(),
+        created_at: 0,
+        burn_enabled: true,
+        max_supply,
+    };
+    s.env.as_contract(&s.client.address, || {
+        let mut state: FactoryState = s.env.storage().instance()
+            .get(&symbol_short!("state")).unwrap();
+        state.token_count += 1;
+        let index = state.token_count;
+        s.env.storage().instance().set(&index, &info);
+        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance()
+            .set(&(&token_addr, symbol_short!("idx")), &index);
+    });
+    token_addr
+}
+
+#[test]
+fn test_mint_within_cap_succeeds() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 1_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, Some(1_000));
+    let recipient = Address::generate(&s.env);
+
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &1_000, &1_000);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 1_000);
+}
+
+#[test]
+fn test_mint_exceeds_cap_returns_error() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 1_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, Some(500));
+    let recipient = Address::generate(&s.env);
+
+    let result = s.client.try_mint_tokens(&token_addr, &admin, &recipient, &501, &1_000);
+    assert_eq!(result, Err(Ok(Error::MaxSupplyExceeded)));
+}
+
+#[test]
+fn test_mint_uncapped_has_no_limit() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 1_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, None);
+    let recipient = Address::generate(&s.env);
+
+    // A very large mint should succeed when there is no cap
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &1_000_000_000, &1_000);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 1_000_000_000);
+}
+
+#[test]
+fn test_mint_exactly_at_cap_succeeds() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 2_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, Some(1_000));
+    let recipient = Address::generate(&s.env);
+
+    // First mint: 600
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &600, &1_000);
+    // Second mint: exactly fills the cap
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &400, &1_000);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 1_000);
+}
+
+#[test]
+fn test_mint_one_over_cap_returns_error() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 2_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, Some(1_000));
+    let recipient = Address::generate(&s.env);
+
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &600, &1_000);
+    // 600 already minted; 401 more would exceed cap of 1_000
+    let result = s.client.try_mint_tokens(&token_addr, &admin, &recipient, &401, &1_000);
+    assert_eq!(result, Err(Ok(Error::MaxSupplyExceeded)));
+}
 
 #[test]
 fn test_token_count_overflow_protection() {
@@ -668,7 +774,7 @@ fn test_token_count_overflow_protection() {
         &String::from_str(&s.env, "OverflowToken"),
         &String::from_str(&s.env, "OVF"),
         &6,
-        &0,
+        &0_u128,
         &5_000,
     );
     
@@ -687,6 +793,7 @@ fn test_mint_with_zero_amount_fails() {
     // Manually register the token in factory storage
     s.env.as_contract(&s.client.address, || {
         s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("idx")), &1u32);
+        s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("owner")), &admin);
         s.env.storage().instance().set(&1u32, &TokenInfo {
             name: String::from_str(&s.env, "Token"),
             symbol: String::from_str(&s.env, "TKN"),
@@ -694,6 +801,7 @@ fn test_mint_with_zero_amount_fails() {
             creator: admin.clone(),
             created_at: 0,
             burn_enabled: true,
+        max_supply: None,
         });
     });
     
@@ -729,6 +837,7 @@ fn test_mint_with_negative_amount_fails() {
             creator: admin.clone(),
             created_at: 0,
             burn_enabled: true,
+        max_supply: None,
         });
     });
     
@@ -775,8 +884,7 @@ fn test_burn_amount_exceeds_balance() {
     let token_addr = s.new_token(&user);
     
     // Mint some tokens to the user
-    let token_client = TokenClient::new(&s.env, &token_addr);
-    token_client.mint(&user, &100);
+    StellarAssetClient::new(&s.env, &token_addr).mint(&user, &100);
     
     // Attempt to burn more than balance
     let result = s.client.try_burn(&token_addr, &user, &101);
@@ -799,17 +907,149 @@ fn test_burn_at_exact_balance() {
             creator: user.clone(),
             created_at: 0,
             burn_enabled: true,
+        max_supply: None,
         });
     });
     
     // Mint some tokens to the user
-    let token_client = TokenClient::new(&s.env, &token_addr);
-    token_client.mint(&user, &100);
+    StellarAssetClient::new(&s.env, &token_addr).mint(&user, &100);
     
     // Burn exactly the balance
     let result = s.client.try_burn(&token_addr, &user, &100);
     assert!(result.is_ok());
     
     // Verify balance is now 0
-    assert_eq!(token_client.balance(&user), 0);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&user), 0);
+}
+// ── upgrade ──────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_upgrade() {
+    let s = Setup::new();
+    let new_wasm_hash = s.salt(1); // just a dummy hash for test
+    s.client.upgrade(&s.admin, &new_wasm_hash);
+}
+
+#[test]
+fn test_upgrade_unauthorized() {
+    let s = Setup::new();
+    let stranger = Address::generate(&s.env);
+    let new_wasm_hash = s.salt(1);
+    let result = s.client.try_upgrade(&stranger, &new_wasm_hash);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+// ── fee split ─────────────────────────────────────────────────────────────────
+
+fn make_split(s: &Setup, pairs: &[(&Address, u32)]) -> Map<Address, u32> {
+    let mut m = Map::new(&s.env);
+    for (addr, bps) in pairs {
+        m.set((*addr).clone(), *bps);
+    }
+    m
+}
+
+#[test]
+fn test_set_fee_split_valid() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&recipient, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let stored = s.client.get_fee_split();
+    assert_eq!(stored.get(s.treasury.clone()).unwrap(), 7_000);
+    assert_eq!(stored.get(recipient).unwrap(), 3_000);
+}
+
+#[test]
+fn test_set_fee_split_invalid_sum_rejected() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    // 6_000 + 3_000 = 9_000 ≠ 10_000
+    let splits = make_split(&s, &[(&s.treasury, 6_000), (&recipient, 3_000)]);
+    assert_eq!(
+        s.client.try_set_fee_split(&s.admin, &splits),
+        Err(Ok(Error::InvalidFeeSplit))
+    );
+}
+
+#[test]
+fn test_set_fee_split_unauthorized() {
+    let s = Setup::new();
+    let stranger = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 10_000)]);
+    assert_eq!(
+        s.client.try_set_fee_split(&stranger, &splits),
+        Err(Ok(Error::Unauthorized))
+    );
+}
+
+#[test]
+fn test_set_fee_split_empty_clears_split() {
+    let s = Setup::new();
+    let recipient = Address::generate(&s.env);
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&recipient, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    // Clear by passing empty map
+    s.client.set_fee_split(&s.admin, &Map::new(&s.env));
+    assert!(s.client.get_fee_split().is_empty());
+}
+
+#[test]
+fn test_fee_distributed_according_to_split() {
+    let s = Setup::new();
+    let referral = Address::generate(&s.env);
+    // 70% treasury, 30% referral
+    let splits = make_split(&s, &[(&s.treasury, 7_000), (&referral, 3_000)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 1_000);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &100, &1_000);
+
+    // 1_000 * 7_000 / 10_000 = 700 to treasury
+    // 1_000 * 3_000 / 10_000 = 300 to referral
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 700);
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&referral), 300);
+}
+
+#[test]
+fn test_fee_goes_to_treasury_when_no_split_set() {
+    let s = Setup::new();
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 1_000);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &100, &1_000);
+
+    assert_eq!(TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury), 1_000);
+}
+
+#[test]
+fn test_fee_split_remainder_goes_to_treasury() {
+    let s = Setup::new();
+    let referral = Address::generate(&s.env);
+    // 3333 + 6667 = 10_000 — with a fee of 10, referral gets 3 (3.333 truncated),
+    // treasury gets 6 (6.667 truncated) + 1 remainder = 7
+    let splits = make_split(&s, &[(&referral, 3_333), (&s.treasury, 6_667)]);
+    s.client.set_fee_split(&s.admin, &splits);
+
+    let token_admin = Address::generate(&s.env);
+    s.fund(&token_admin, 10);
+
+    let token_addr = seed_token_with_burn(&s, &token_admin, true);
+    let recipient = Address::generate(&s.env);
+    s.client.mint_tokens(&token_addr, &token_admin, &recipient, &1, &10);
+
+    let referral_bal = TokenClient::new(&s.env, &s.fee_token).balance(&referral);
+    let treasury_bal = TokenClient::new(&s.env, &s.fee_token).balance(&s.treasury);
+    // Total must equal the fee paid
+    assert_eq!(referral_bal + treasury_bal, 10);
+    // Remainder goes to treasury, so treasury >= its direct share
+    assert!(treasury_bal >= 6);
 }
