@@ -9,9 +9,11 @@ import ErrorBoundary from './components/ErrorBoundary.tsx'
 import { validateEnv } from './utils/envValidation.ts'
 import { ErrorBoundary } from './lib/monitoring/errorBoundary.tsx'
 import { registerUnhandledRejectionHandler } from './lib/monitoring/unhandledRejections.ts'
+import { registerCSPReporter } from './csp/cspReporter.ts'
 
 // Must run before React mounts
 registerUnhandledRejectionHandler()
+registerCSPReporter()
 
 const { valid, missing } = validateEnv()
 
