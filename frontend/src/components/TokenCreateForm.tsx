@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Input, Button, MainnetConfirmationModal, ConfirmModal, ProgressIndicator } from './UI'
+import { Input, Button, MainnetConfirmationModal, ConfirmModal, ProgressIndicator, InsufficientBalanceWarning } from './UI'
 import type { ProgressStep } from './UI'
 import { useMainnetConfirmation } from '../hooks/useMainnetConfirmation'
 import { useToast } from '../context/ToastContext'
 import { useTos } from '../context/TosContext'
 import { useWalletContext } from '../context/WalletContext'
 import { useStellarContext } from '../context/StellarContext'
+import { useBalanceCheck } from '../hooks/useBalanceCheck'
 import { TokenDeployParams } from '../types'
 import { STELLAR_CONFIG } from '../config/stellar'
 import {
@@ -18,6 +19,7 @@ import { ShareButton } from './ShareButton'
 import { useTranslation } from 'react-i18next'
 
 const ESTIMATED_FEE = '0.01' // XLM
+const ESTIMATED_FEE_XLM = 0.01
 
 export const TokenCreateForm: React.FC = () => {
   const { stellarService } = useStellarContext()
@@ -41,6 +43,7 @@ export const TokenCreateForm: React.FC = () => {
   const { addToast } = useToast()
   const { requireTos } = useTos()
   const { t } = useTranslation()
+  const { hasSufficientBalance, shortfall, isTestnet } = useBalanceCheck(ESTIMATED_FEE_XLM)
 
   const updateStep = (index: number, status: ProgressStep['status']) => {
     setDeploymentSteps((prev) => {
@@ -129,19 +132,6 @@ export const TokenCreateForm: React.FC = () => {
       setIsDeploying(false)
     }
   }
-        setInitialSupply('')
-        setDescription('')
-        // Refresh balance after successful transaction
-        await refreshBalance()
-      } else {
-        addToast(t('tokenForm.deployFailed'), 'error')
-      }
-    } catch (error: unknown) {
-      addToast(error instanceof Error ? error.message : t('tokenForm.deployError'), 'error')
-    } finally {
-      setIsDeploying(false)
-    }
-  }
 
   return (
     <>
@@ -225,9 +215,12 @@ export const TokenCreateForm: React.FC = () => {
             rows={3}
           />
         </div>
-        <Button type="submit" disabled={isDeploying} className="w-full sm:w-auto">
+        <Button type="submit" disabled={isDeploying || !hasSufficientBalance} className="w-full sm:w-auto">
           {isDeploying ? t('tokenForm.deploying') : t('tokenForm.deploy')}
         </Button>
+        {!hasSufficientBalance && (
+          <InsufficientBalanceWarning shortfall={shortfall} isTestnet={isTestnet} />
+        )}
       </form>
 
       <ConfirmModal

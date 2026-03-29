@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Input, Button, ConfirmModal } from './UI'
+import { Input, Button, ConfirmModal, InsufficientBalanceWarning } from './UI'
 import { useDebounce } from '../hooks/useDebounce'
 import { useTokenBalance } from '../hooks/useTokenBalance'
+import { useBalanceCheck } from '../hooks/useBalanceCheck'
 import { useWalletContext } from '../context/WalletContext'
 import { useTos } from '../context/TosContext'
 import { useStellarContext } from '../context/StellarContext'
 import { useToast } from '../context/ToastContext'
 import type { TokenInfo } from '../types'
+
+const ESTIMATED_FEE_XLM = 0.01
 
 interface BurnFormProps {
   tokenAddress?: string
@@ -21,6 +24,7 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   const { wallet } = useWalletContext()
   const { addToast } = useToast()
   const { requireTos } = useTos()
+  const { hasSufficientBalance, shortfall, isTestnet } = useBalanceCheck(ESTIMATED_FEE_XLM)
 
   const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [amount, setAmount] = useState('')
@@ -111,11 +115,14 @@ export const BurnForm: React.FC<BurnFormProps> = ({
           type="submit"
           variant="secondary"
           loading={isSubmitting}
-          disabled={isSubmitting || amountExceedsBalance}
+          disabled={isSubmitting || amountExceedsBalance || !hasSufficientBalance}
           className="w-full sm:w-auto"
         >
           Burn Tokens
         </Button>
+        {!hasSufficientBalance && (
+          <InsufficientBalanceWarning shortfall={shortfall} isTestnet={isTestnet} />
+        )}
       </form>
 
       <ConfirmModal
