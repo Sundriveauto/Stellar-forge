@@ -89,6 +89,7 @@ fn test_create_token() {
         creator: creator.clone(),
         created_at: 0,
         burn_enabled: true,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
@@ -237,6 +238,7 @@ fn test_set_metadata_unauthorized() {
         creator: creator.clone(),
         created_at: 0,
         burn_enabled: true,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
@@ -294,6 +296,7 @@ fn test_mint_tokens_unauthorized() {
         creator: creator.clone(),
         created_at: 0,
         burn_enabled: true,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
@@ -327,6 +330,7 @@ fn seed_token_with_burn(s: &Setup, creator: &Address, burn_enabled: bool) -> Add
         creator: creator.clone(),
         created_at: 0,
         burn_enabled,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
@@ -472,6 +476,7 @@ fn test_get_token_info() {
         creator: creator.clone(),
         created_at: 0,
         burn_enabled: true,
+        max_supply: None,
     };
     s.env.as_contract(&s.client.address, || {
         s.env.storage().instance().set(&1u32, &info);
@@ -649,7 +654,102 @@ fn test_get_tokens_by_creator_empty_for_unknown() {
     assert_eq!(s.client.get_tokens_by_creator(&stranger).len(), 0);
 }
 
-// ── arithmetic overflow protection ────────────────────────────────────────────
+// ── max supply cap ────────────────────────────────────────────────────────────
+
+fn seed_token_with_cap(s: &Setup, creator: &Address, max_supply: Option<i128>) -> Address {
+    let token_addr = s.new_token(creator);
+    let info = TokenInfo {
+        name: String::from_str(&s.env, "T"),
+        symbol: String::from_str(&s.env, "T"),
+        decimals: 7,
+        creator: creator.clone(),
+        created_at: 0,
+        burn_enabled: true,
+        max_supply,
+    };
+    s.env.as_contract(&s.client.address, || {
+        let mut state: FactoryState = s.env.storage().instance()
+            .get(&symbol_short!("state")).unwrap();
+        state.token_count += 1;
+        let index = state.token_count;
+        s.env.storage().instance().set(&index, &info);
+        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance()
+            .set(&(&token_addr, symbol_short!("idx")), &index);
+    });
+    token_addr
+}
+
+#[test]
+fn test_mint_within_cap_succeeds() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 1_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, Some(1_000));
+    let recipient = Address::generate(&s.env);
+
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &1_000, &1_000);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 1_000);
+}
+
+#[test]
+fn test_mint_exceeds_cap_returns_error() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 1_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, Some(500));
+    let recipient = Address::generate(&s.env);
+
+    let result = s.client.try_mint_tokens(&token_addr, &admin, &recipient, &501, &1_000);
+    assert_eq!(result, Err(Ok(Error::MaxSupplyExceeded)));
+}
+
+#[test]
+fn test_mint_uncapped_has_no_limit() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 1_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, None);
+    let recipient = Address::generate(&s.env);
+
+    // A very large mint should succeed when there is no cap
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &1_000_000_000, &1_000);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 1_000_000_000);
+}
+
+#[test]
+fn test_mint_exactly_at_cap_succeeds() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 2_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, Some(1_000));
+    let recipient = Address::generate(&s.env);
+
+    // First mint: 600
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &600, &1_000);
+    // Second mint: exactly fills the cap
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &400, &1_000);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&recipient), 1_000);
+}
+
+#[test]
+fn test_mint_one_over_cap_returns_error() {
+    let s = Setup::new();
+    let admin = Address::generate(&s.env);
+    s.fund(&admin, 2_000);
+
+    let token_addr = seed_token_with_cap(&s, &admin, Some(1_000));
+    let recipient = Address::generate(&s.env);
+
+    s.client.mint_tokens(&token_addr, &admin, &recipient, &600, &1_000);
+    // 600 already minted; 401 more would exceed cap of 1_000
+    let result = s.client.try_mint_tokens(&token_addr, &admin, &recipient, &401, &1_000);
+    assert_eq!(result, Err(Ok(Error::MaxSupplyExceeded)));
+}
 
 #[test]
 fn test_token_count_overflow_protection() {
@@ -701,6 +801,7 @@ fn test_mint_with_zero_amount_fails() {
             creator: admin.clone(),
             created_at: 0,
             burn_enabled: true,
+        max_supply: None,
         });
     });
     
@@ -736,6 +837,7 @@ fn test_mint_with_negative_amount_fails() {
             creator: admin.clone(),
             created_at: 0,
             burn_enabled: true,
+        max_supply: None,
         });
     });
     
@@ -805,6 +907,7 @@ fn test_burn_at_exact_balance() {
             creator: user.clone(),
             created_at: 0,
             burn_enabled: true,
+        max_supply: None,
         });
     });
     

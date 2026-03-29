@@ -25,6 +25,8 @@ pub struct TokenInfo {
     pub created_at: u64,
     /// Whether burning is enabled for this token. Defaults to true.
     pub burn_enabled: bool,
+    /// Optional maximum supply cap. `None` means unlimited minting.
+    pub max_supply: Option<i128>,
 }
 
 #[contracttype]
@@ -168,7 +170,7 @@ impl TokenFactory {
         state.locked = true;
         Self::save_state(&env, &state);
 
-        let result = Self::create_token_inner(&env, creator, salt, token_wasm_hash, name, symbol, decimals, initial_supply, fee_payment, &mut state);
+        let result = Self::create_token_inner(&env, creator, salt, token_wasm_hash, name, symbol, decimals, initial_supply, max_supply, fee_payment, &mut state);
 
         // Always release the lock, regardless of success or error.
         state.locked = false;
@@ -248,6 +250,7 @@ impl TokenFactory {
             creator: creator.clone(),
             created_at: env.ledger().timestamp(),
             burn_enabled: true,
+            max_supply,
         });
 
         let creator_key = (symbol_short!("crtoks"), creator.clone());
@@ -348,6 +351,15 @@ impl TokenFactory {
         
         if creator != admin {
             return Err(Error::Unauthorized);
+        }
+
+        // Enforce max supply cap if set
+        if let Some(cap) = token_info.max_supply {
+            let current = token::TokenClient::new(&env, &token_address).total_supply();
+            let new_total = current.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
+            if new_total > cap {
+                return Err(Error::MaxSupplyExceeded);
+            }
         }
 
         token::TokenClient::new(&env, &state.fee_token).transfer(
