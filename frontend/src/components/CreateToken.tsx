@@ -102,11 +102,13 @@ export const CreateToken: React.FC = () => {
       )}
 
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-        <TokenForm
-          onSubmit={handleTokenFormSubmit}
-          isLoading={isDeploying}
-          estimatedFee="0.01"
-        />
+        <ErrorBoundary>
+          <TokenForm
+            onSubmit={handleTokenFormSubmit}
+            isLoading={isDeploying}
+            estimatedFee="0.01"
+          />
+        </ErrorBoundary>
       </div>
     </div>
   )
