@@ -1,6 +1,9 @@
 
 import React from 'react';
 import { useTransactionHistory } from '../hooks/useTransactionHistory';
+import { useNetwork } from '../context/NetworkContext';
+import { stellarExplorerUrl } from '../utils/formatting';
+import { ExplorerLink } from './ExplorerLink';
 
 interface TransactionHistoryProps {
   publicKey?: string;
