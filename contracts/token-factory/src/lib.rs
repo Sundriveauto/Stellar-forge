@@ -16,6 +16,21 @@ pub trait TokenInit {
 }
 
 #[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DataKey {
+    /// Global factory state
+    State,
+    /// Token info stored by index
+    TokenInfo(u32),
+    /// List of token indices created by a specific creator
+    CreatorTokens(Address),
+    /// Reverse mapping: token address -> index
+    TokenIndex(Address),
+    /// Metadata URI for a token
+    Metadata(Address),
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct TokenInfo {
     pub name: String,
@@ -97,7 +112,7 @@ impl TokenFactory {
         base_fee: i128,
         metadata_fee: i128,
     ) -> Result<(), Error> {
-        if env.storage().instance().has(&symbol_short!("init")) {
+        if env.storage().instance().has(&DataKey::State) {
             return Err(Error::AlreadyInitialized);
         }
         let state = FactoryState {
@@ -110,19 +125,18 @@ impl TokenFactory {
             metadata_fee,
             token_count: 0,
         };
-        env.storage().instance().set(&symbol_short!("state"), &state);
-        env.storage().instance().set(&symbol_short!("init"), &true);
+        env.storage().instance().set(&DataKey::State, &state);
         env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
         env.events().publish((symbol_short!("init"),), (admin,));
         Ok(())
     }
 
     fn load_state(env: &Env) -> Result<FactoryState, Error> {
-        env.storage().instance().get(&symbol_short!("state")).ok_or(Error::StateNotFound)
+        env.storage().instance().get(&DataKey::State).ok_or(Error::StateNotFound)
     }
 
     fn save_state(env: &Env, state: &FactoryState) {
-        env.storage().instance().set(&symbol_short!("state"), state);
+        env.storage().instance().set(&DataKey::State, state);
         // Extend instance TTL on every state write so the contract never expires.
         env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
     }
@@ -233,7 +247,7 @@ impl TokenFactory {
         state.token_count = new_count;
         let index = state.token_count;
 
-        env.storage().instance().set(&index, &TokenInfo {
+        env.storage().instance().set(&DataKey::TokenInfo(index), &TokenInfo {
             name,
             symbol,
             decimals,
@@ -242,7 +256,7 @@ impl TokenFactory {
             burn_enabled: true,
         });
 
-        let creator_key = (symbol_short!("crtoks"), creator.clone());
+        let creator_key = DataKey::CreatorTokens(creator.clone());
         let mut list: Vec<u32> = env
             .storage()
             .instance()
@@ -252,7 +266,7 @@ impl TokenFactory {
         env.storage().instance().set(&creator_key, &list);
 
         // Store reverse mapping: token_address -> index (for burn_enabled lookup)
-        env.storage().instance().set(&(&token_address, symbol_short!("idx")), &index);
+        env.storage().instance().set(&DataKey::TokenIndex(token_address.clone()), &index);
 
         // Extend TTL for all token-related storage entries written above.
         Self::extend_token_ttl(env, &token_address, index);
@@ -279,17 +293,16 @@ impl TokenFactory {
         }
 
         // Fetch TokenInfo to verify creator authorization
-        let idx_key = (&token_address, symbol_short!("idx"));
         let index: u32 = env
             .storage()
             .instance()
-            .get(&idx_key)
+            .get(&DataKey::TokenIndex(token_address.clone()))
             .ok_or(Error::TokenNotFound)?;
 
         let token_info: TokenInfo = env
             .storage()
             .instance()
-            .get(&index)
+            .get(&DataKey::TokenInfo(index))
             .ok_or(Error::TokenNotFound)?;
 
         // Verify admin is the token creator
@@ -298,7 +311,7 @@ impl TokenFactory {
         }
 
         // Guard: prevent overwriting existing metadata
-        if env.storage().instance().has(&(&token_address, symbol_short!("meta"))) {
+        if env.storage().instance().has(&DataKey::Metadata(token_address.clone())) {
             return Err(Error::MetadataAlreadySet);
         }
 
@@ -310,7 +323,7 @@ impl TokenFactory {
 
         env.storage()
             .instance()
-            .set(&(&token_address, symbol_short!("meta")), &metadata_uri);
+            .set(&DataKey::Metadata(token_address.clone()), &metadata_uri);
 
         // Extend TTL so the metadata entry remains accessible.
         env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
@@ -343,17 +356,16 @@ impl TokenFactory {
         }
 
         // Fetch TokenInfo to verify creator authorization
-        let idx_key = (&token_address, symbol_short!("idx"));
         let index: u32 = env
             .storage()
             .instance()
-            .get(&idx_key)
+            .get(&DataKey::TokenIndex(token_address.clone()))
             .ok_or(Error::TokenNotFound)?;
 
         let token_info: TokenInfo = env
             .storage()
             .instance()
-            .get(&index)
+            .get(&DataKey::TokenInfo(index))
             .ok_or(Error::TokenNotFound)?;
 
         // Verify admin is the token creator
@@ -393,9 +405,8 @@ impl TokenFactory {
         }
 
         // Check burn_enabled via reverse index lookup before burning
-        let idx_key = (&token_address, symbol_short!("idx"));
-        if let Some(index) = env.storage().instance().get::<_, u32>(&idx_key) {
-            let info: TokenInfo = env.storage().instance().get(&index).ok_or(Error::TokenNotFound)?;
+        if let Some(index) = env.storage().instance().get::<_, u32>(&DataKey::TokenIndex(token_address.clone())) {
+            let info: TokenInfo = env.storage().instance().get(&DataKey::TokenInfo(index)).ok_or(Error::TokenNotFound)?;
             if !info.burn_enabled {
                 return Err(Error::BurnNotEnabled);
             }
@@ -417,21 +428,20 @@ impl TokenFactory {
     ) -> Result<(), Error> {
         admin.require_auth();
 
-        let idx_key = (&token_address, symbol_short!("idx"));
         let index: u32 = env
             .storage()
             .instance()
-            .get(&idx_key)
+            .get(&DataKey::TokenIndex(token_address.clone()))
             .ok_or(Error::TokenNotFound)?;
 
-        let mut info: TokenInfo = env.storage().instance().get(&index).ok_or(Error::TokenNotFound)?;
+        let mut info: TokenInfo = env.storage().instance().get(&DataKey::TokenInfo(index)).ok_or(Error::TokenNotFound)?;
 
         if info.creator != admin {
             return Err(Error::Unauthorized);
         }
 
         info.burn_enabled = enabled;
-        env.storage().instance().set(&index, &info);
+        env.storage().instance().set(&DataKey::TokenInfo(index), &info);
         // Extend TTL so the updated token info remains accessible.
         env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
         Ok(())
@@ -530,12 +540,12 @@ impl TokenFactory {
     pub fn get_token_info(env: Env, index: u32) -> Result<TokenInfo, Error> {
         env.storage()
             .instance()
-            .get(&index)
+            .get(&DataKey::TokenInfo(index))
             .ok_or(Error::TokenNotFound)
     }
 
     pub fn get_tokens_by_creator(env: Env, creator: Address) -> Vec<u32> {
-        let key = (symbol_short!("crtoks"), creator);
+        let key = DataKey::CreatorTokens(creator);
         env.storage()
             .instance()
             .get(&key)

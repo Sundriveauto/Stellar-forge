@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::*;
+use soroban_sdk::testutils::storage::Instance;
 use soroban_sdk::{
     testutils::Address as _,
     token::{StellarAssetClient, TokenClient},
@@ -92,11 +93,11 @@ fn test_create_token() {
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.token_count += 1;
-        s.env.storage().instance().set(&1u32, &info);
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
-        let key = (symbol_short!("crtoks"), creator.clone());
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &info);
+        s.env.storage().instance().set(&DataKey::State, &state);
+        let key = DataKey::CreatorTokens(creator.clone());
         let mut list: soroban_sdk::Vec<u32> = s.env.storage().instance()
             .get(&key).unwrap_or_else(|| soroban_sdk::vec![&s.env]);
         list.push_back(1u32);
@@ -240,13 +241,13 @@ fn test_set_metadata_unauthorized() {
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.token_count += 1;
         let index = state.token_count;
-        s.env.storage().instance().set(&index, &info);
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::TokenInfo(index), &info);
+        s.env.storage().instance().set(&DataKey::State, &state);
         s.env.storage().instance()
-            .set(&(&token_addr, symbol_short!("idx")), &index);
+            .set(&DataKey::TokenIndex(token_addr.clone()), &index);
     });
 
     // Unauthorized user should not be able to set metadata
@@ -295,13 +296,13 @@ fn test_mint_tokens_unauthorized() {
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.token_count += 1;
         let index = state.token_count;
-        s.env.storage().instance().set(&index, &info);
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::TokenInfo(index), &info);
+        s.env.storage().instance().set(&DataKey::State, &state);
         s.env.storage().instance()
-            .set(&(&token_addr, symbol_short!("idx")), &index);
+            .set(&DataKey::TokenIndex(token_addr.clone()), &index);
     });
 
     // Unauthorized user should not be able to mint tokens
@@ -326,13 +327,13 @@ fn seed_token_with_burn(s: &Setup, creator: &Address, burn_enabled: bool) -> Add
     };
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.token_count += 1;
         let index = state.token_count;
-        s.env.storage().instance().set(&index, &info);
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::TokenInfo(index), &info);
+        s.env.storage().instance().set(&DataKey::State, &state);
         s.env.storage().instance()
-            .set(&(&token_addr, symbol_short!("idx")), &index);
+            .set(&DataKey::TokenIndex(token_addr.clone()), &index);
     });
     token_addr
 }
@@ -468,7 +469,7 @@ fn test_get_token_info() {
         burn_enabled: true,
     };
     s.env.as_contract(&s.client.address, || {
-        s.env.storage().instance().set(&1u32, &info);
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &info);
     });
 
     let result = s.client.get_token_info(&1);
@@ -542,9 +543,9 @@ fn test_reentrancy_guard_blocks_concurrent_call() {
     // Manually set locked = true in factory state to simulate a call already in progress
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         state.locked = true;
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::State, &state);
     });
 
     // A second create_token call while locked should return Reentrancy
@@ -573,7 +574,7 @@ fn test_reentrancy_guard_released_after_error() {
     // After the failed call, locked must be false
     s.env.as_contract(&s.client.address, || {
         let state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         assert!(!state.locked, "lock should be released after an error");
     });
 }
@@ -583,7 +584,7 @@ fn test_initial_state_is_not_locked() {
     let s = Setup::new();
     s.env.as_contract(&s.client.address, || {
         let state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         assert!(!state.locked);
     });
 }
@@ -623,7 +624,7 @@ fn test_get_tokens_by_creator() {
     let creator = Address::generate(&s.env);
 
     s.env.as_contract(&s.client.address, || {
-        let key = (symbol_short!("crtoks"), creator.clone());
+        let key = DataKey::CreatorTokens(creator.clone());
         let mut list: soroban_sdk::Vec<u32> = soroban_sdk::vec![&s.env];
         list.push_back(1u32);
         list.push_back(2u32);
@@ -650,11 +651,11 @@ fn test_token_count_overflow_protection() {
     let s = Setup::new();
     s.env.as_contract(&s.client.address, || {
         let mut state: FactoryState = s.env.storage().instance()
-            .get(&symbol_short!("state")).unwrap();
+            .get(&DataKey::State).unwrap();
         
         // Set token_count to max u32 value, simulating near-overflow state
         state.token_count = u32::MAX;
-        s.env.storage().instance().set(&symbol_short!("state"), &state);
+        s.env.storage().instance().set(&DataKey::State, &state);
     });
 
     let creator = Address::generate(&s.env);
@@ -686,8 +687,8 @@ fn test_mint_with_zero_amount_fails() {
     
     // Manually register the token in factory storage
     s.env.as_contract(&s.client.address, || {
-        s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("idx")), &1u32);
-        s.env.storage().instance().set(&1u32, &TokenInfo {
+        s.env.storage().instance().set(&DataKey::TokenIndex(token_addr.clone()), &DataKey::TokenInfo(1));
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &TokenInfo {
             name: String::from_str(&s.env, "Token"),
             symbol: String::from_str(&s.env, "TKN"),
             decimals: 6,
@@ -721,8 +722,8 @@ fn test_mint_with_negative_amount_fails() {
     
     // Manually register the token in factory storage
     s.env.as_contract(&s.client.address, || {
-        s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("idx")), &1u32);
-        s.env.storage().instance().set(&1u32, &TokenInfo {
+        s.env.storage().instance().set(&DataKey::TokenIndex(token_addr.clone()), &DataKey::TokenInfo(1));
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &TokenInfo {
             name: String::from_str(&s.env, "Token"),
             symbol: String::from_str(&s.env, "TKN"),
             decimals: 6,
@@ -776,7 +777,7 @@ fn test_burn_amount_exceeds_balance() {
     
     // Mint some tokens to the user
     let token_client = TokenClient::new(&s.env, &token_addr);
-    token_client.mint(&user, &100);
+    token::StellarAssetClient::new(&s.env, &token_addr).mint(&user, &100);
     
     // Attempt to burn more than balance
     let result = s.client.try_burn(&token_addr, &user, &101);
@@ -791,8 +792,8 @@ fn test_burn_at_exact_balance() {
     
     // Register token in factory
     s.env.as_contract(&s.client.address, || {
-        s.env.storage().instance().set(&(token_addr.clone(), symbol_short!("idx")), &1u32);
-        s.env.storage().instance().set(&1u32, &TokenInfo {
+        s.env.storage().instance().set(&DataKey::TokenIndex(token_addr.clone()), &DataKey::TokenInfo(1));
+        s.env.storage().instance().set(&DataKey::TokenInfo(1), &TokenInfo {
             name: String::from_str(&s.env, "Token"),
             symbol: String::from_str(&s.env, "TKN"),
             decimals: 6,
@@ -804,7 +805,7 @@ fn test_burn_at_exact_balance() {
     
     // Mint some tokens to the user
     let token_client = TokenClient::new(&s.env, &token_addr);
-    token_client.mint(&user, &100);
+    token::StellarAssetClient::new(&s.env, &token_addr).mint(&user, &100);
     
     // Burn exactly the balance
     let result = s.client.try_burn(&token_addr, &user, &100);
