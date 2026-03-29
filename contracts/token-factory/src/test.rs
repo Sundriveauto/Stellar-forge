@@ -141,6 +141,22 @@ fn test_create_token_blocked_when_paused() {
     assert_eq!(result, Err(Ok(Error::ContractPaused)));
 }
 
+#[test]
+fn test_create_token_invalid_decimals() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    s.fund(&creator, 1_000);
+
+    // Test decimals > 18
+    let result = s.client.try_create_token(
+        &creator, &s.salt(0), &s.dummy_hash(),
+        &String::from_str(&s.env, "MyToken"),
+        &String::from_str(&s.env, "MTK"),
+        &19, &0_u128, &1_000,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidDecimals)));
+}
+
 // ── set_metadata ──────────────────────────────────────────────────────────────
 
 #[test]
