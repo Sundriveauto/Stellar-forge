@@ -32,6 +32,9 @@ export const NavBar: React.FC<NavBarProps> = ({ onHelpClick, isAdmin = false }) 
         <NavLink to="/tokens" className={getLinkClass}>
           {t('nav.tokens')}
         </NavLink>
+        <NavLink to="/explorer" className={getLinkClass}>
+          {t('nav.explorer', 'Explorer')}
+        </NavLink>
         {isAdmin && (
           <NavLink
             to="/admin"
