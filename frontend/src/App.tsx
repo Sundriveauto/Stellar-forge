@@ -22,6 +22,7 @@ import { MintForm } from './components/MintForm'
 import { BurnForm } from './components/BurnForm'
 import { Dashboard } from './components/Dashboard'
 import { TokenDetail } from './components/TokenDetail'
+import { TokenExplorer } from './components/TokenExplorer'
 import { FAQ } from './components/FAQ'
 import { AdminPanel } from './components/AdminPanel'
 import { useFactoryState } from './hooks/useFactoryState'
@@ -264,6 +265,14 @@ function AppContent() {
                         <TokenDetail />
                       </ErrorBoundary>
                     </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/explorer"
+                  element={
+                    <ErrorBoundary>
+                      <TokenExplorer />
+                    </ErrorBoundary>
                   }
                 />
                 <Route
