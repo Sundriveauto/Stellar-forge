@@ -37,6 +37,7 @@ function AppContent() {
   const { addToast } = useToast()
   const { t } = useTranslation()
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [dark, setDark] = useDarkMode()
 
   const handleGetStarted = () => addToast(t('home.welcomeToast'), 'info')
 
@@ -80,7 +81,7 @@ function AppContent() {
                   variant="secondary" 
                   size="sm" 
                   className="shrink-0 p-2 rounded-full"
-                  aria-label="Toggle dark mode"
+                  aria-label={t('app.toggleDarkMode')}
                 >
                   {dark ? '☀️' : '🌙'}
                 </Button>
@@ -152,9 +153,7 @@ function AppContent() {
         {!isFactoryConfigured() && (
           <div className="bg-yellow-50 border-b border-yellow-300 p-4" role="alert">
             <div className="max-w-7xl mx-auto text-yellow-800 text-sm font-medium">
-              ⚠️ Factory contract not configured. Please set{' '}
-              <code className="font-mono bg-yellow-100 px-1 rounded">VITE_FACTORY_CONTRACT_ID</code>{' '}
-              in your <code className="font-mono bg-yellow-100 px-1 rounded">.env</code> file.
+              ⚠️ {t('app.factoryWarning')}
             </div>
           </div>
         )}

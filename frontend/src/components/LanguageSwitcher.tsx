@@ -2,7 +2,8 @@ import { useTranslation } from 'react-i18next'
 
 const LANGUAGES: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
-  // Add new languages here, e.g.: { code: 'es', label: 'Español' }
+  { code: 'es', label: 'Español' },
+  { code: 'pt', label: 'Português' },
 ]
 
 export const LanguageSwitcher: React.FC = () => {

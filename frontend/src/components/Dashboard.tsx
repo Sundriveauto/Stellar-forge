@@ -6,33 +6,24 @@ import { TransactionHistory } from './TransactionHistory'
 import { useDebounce } from '../hooks/useDebounce'
 import { useTokenDashboard } from '../hooks/useTokenDashboard'
 import { STELLAR_CONFIG } from '../config/stellar'
-import { formatAddress } from '../utils/formatting'
+import { formatAddress, stellarExplorerUrl } from '../utils/formatting'
+import { useNetwork } from '../context/NetworkContext'
 
-function explorerUrl(address: string): string {
-  const network = STELLAR_CONFIG.network as 'testnet' | 'mainnet'
-  const base =
-    network === 'mainnet'
-      ? 'https://stellar.expert/explorer/public/contract'
-      : 'https://stellar.expert/explorer/testnet/contract'
-  return `${base}/${address}`
-}
-
-function SkeletonRow() {
-  return (
-    <li className="p-3 border rounded animate-pulse flex items-center justify-between gap-2">
-      <div className="space-y-1.5 flex-1">
-"h-4 bg-gray-200 dark:bg-slate-700 rounded w-1/3"
-        <div className="h-3 bg-gray-200 rounded w-1/2" />
-      </div>
-      <div className="h-3 bg-gray-200 rounded w-20" />
-    </li>
-  )
-}
+const SkeletonRow = () => (
+  <li className="p-3 border rounded animate-pulse flex items-center justify-between gap-2">
+    <div className="space-y-1.5 flex-1">
+      <div className="h-4 bg-gray-200 dark:bg-slate-700 rounded w-1/3" />
+      <div className="h-3 bg-gray-200 dark:bg-slate-700 rounded w-1/2" />
+    </div>
+    <div className="h-3 bg-gray-200 dark:bg-slate-700 rounded w-20" />
+  </li>
+)
 
 export const TokenDashboard: React.FC = () => {
   const { rows, isLoading, error, page, totalPages, totalCount, pageSize, setPage, refresh } =
     useTokenDashboard()
   const { t } = useTranslation()
+  const { network } = useNetwork()
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
 
@@ -40,7 +31,7 @@ export const TokenDashboard: React.FC = () => {
     if (!debouncedSearch.trim()) return rows
     const q = debouncedSearch.toLowerCase()
     return rows.filter(
-      (r) => r.name.toLowerCase().includes(q) || r.symbol.toLowerCase().includes(q),
+      (r: any) => r.name.toLowerCase().includes(q) || r.symbol.toLowerCase().includes(q),
     )
   }, [rows, debouncedSearch])
 
@@ -54,15 +45,14 @@ export const TokenDashboard: React.FC = () => {
             label={t('dashboard.searchLabel')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or symbol..."
+            placeholder={t('dashboard.searchPlaceholder')}
           />
           <button
             onClick={refresh}
             disabled={isLoading}
-"mt-6 px-3 py-2 text-sm rounded border border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors shrink-0"
-            aria-label="Refresh token list"
+            className="mt-6 px-3 py-2 text-sm rounded border border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors shrink-0 dark:text-gray-200"
           >
-            ↻ Refresh
+            ↻ {t('dashboard.refresh')}
           </button>
         </div>
 
@@ -74,14 +64,14 @@ export const TokenDashboard: React.FC = () => {
           ) : filteredRows.length === 0 ? (
             <li className="text-sm text-gray-500 py-4 text-center">
               {totalCount === 0
-                ? 'No tokens have been deployed yet.'
-                : 'No tokens match your search.'}
+                ? t('dashboard.noTokens')
+                : t('dashboard.noSearchMatch')}
             </li>
           ) : (
-            filteredRows.map((token) => (
+            filteredRows.map((token: any) => (
               <li
                 key={token.address}
-"p-3 border rounded text-sm flex items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors dark:bg-slate-800 dark:border-slate-700"
+                className="p-3 border rounded text-sm flex items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-gray-200"
               >
                 <div className="min-w-0">
                   <span className="font-medium">{token.name}</span>
@@ -94,17 +84,14 @@ export const TokenDashboard: React.FC = () => {
                   </div>
                   {token.creator && (
                     <div className="text-xs text-gray-400 font-mono truncate" title={token.creator}>
-                      Creator: {formatAddress(token.creator)}
+                      {t('dashboard.creatorPrefix')} {formatAddress(token.creator)}
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-blue-500 hover:underline shrink-0 truncate max-w-[100px]" title={token.address} aria-label={`View ${token.name} on Stellar Explorer`}>
-                    {token.address}
-                  </span>
                   <CopyButton value={token.address} ariaLabel="Copy token address" />
                   <a
-                    href={explorerUrl(token.address)}
+                    href={stellarExplorerUrl('contract', token.address, network)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-blue-500 hover:underline shrink-0"
@@ -132,7 +119,7 @@ export const TokenDashboard: React.FC = () => {
 
       {factoryContractId && (
         <div className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-800">{t('dashboard.recentActivity')}</h2>
+          <h2 className="text-base font-semibold text-gray-800 dark:text-white">{t('dashboard.recentActivity')}</h2>
           <TransactionHistory contractId={factoryContractId} />
         </div>
       )}
@@ -141,4 +128,3 @@ export const TokenDashboard: React.FC = () => {
 }
 
 export const Dashboard = TokenDashboard
-
