@@ -233,6 +233,8 @@ impl TokenFactory {
         state.token_count = new_count;
         let index = state.token_count;
 
+        let token_name = name.clone();
+        let token_symbol = symbol.clone();
         env.storage().instance().set(&index, &TokenInfo {
             name,
             symbol,
@@ -258,7 +260,7 @@ impl TokenFactory {
         Self::extend_token_ttl(env, &token_address, index);
 
         env.events()
-            .publish((symbol_short!("created"),), (token_address.clone(), creator, index));
+            .publish((symbol_short!("created"),), (token_address.clone(), creator, token_name, token_symbol));
         Ok(token_address)
     }
 
