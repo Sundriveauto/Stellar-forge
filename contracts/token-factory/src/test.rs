@@ -532,6 +532,53 @@ fn test_transfer_admin_same_address_fails() {
     );
 }
 
+// ── update_admin ──────────────────────────────────────────────────────────────
+
+#[test]
+fn test_update_admin() {
+    let s = Setup::new();
+    let new_admin = Address::generate(&s.env);
+    s.client.update_admin(&s.admin, &new_admin);
+    assert_eq!(s.client.get_state().admin, new_admin);
+}
+
+#[test]
+fn test_update_admin_unauthorized() {
+    let s = Setup::new();
+    let stranger = Address::generate(&s.env);
+    let new_admin = Address::generate(&s.env);
+    assert_eq!(
+        s.client.try_update_admin(&stranger, &new_admin),
+        Err(Ok(Error::Unauthorized))
+    );
+}
+
+#[test]
+fn test_update_admin_same_address_fails() {
+    let s = Setup::new();
+    assert_eq!(
+        s.client.try_update_admin(&s.admin, &s.admin),
+        Err(Ok(Error::InvalidParameters))
+    );
+}
+
+#[test]
+fn test_update_admin_old_admin_loses_access() {
+    let s = Setup::new();
+    let new_admin = Address::generate(&s.env);
+    s.client.update_admin(&s.admin, &new_admin);
+
+    // Old admin can no longer pause (admin-only operation)
+    assert_eq!(
+        s.client.try_pause(&s.admin),
+        Err(Ok(Error::Unauthorized))
+    );
+
+    // New admin can perform admin-only operations
+    s.client.pause(&new_admin);
+    assert!(s.client.get_state().paused);
+}
+
 // ── reentrancy guard ──────────────────────────────────────────────────────────
 
 #[test]
