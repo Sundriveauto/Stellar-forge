@@ -234,7 +234,7 @@ impl TokenFactory {
         state.locked = true;
         Self::save_state(&env, &state);
 
-        let result = Self::create_token_inner(&env, creator, salt, token_wasm_hash, name, symbol, decimals, initial_supply, max_supply, fee_payment, &mut state);
+        let result = Self::create_token_inner(&env, creator, salt, token_wasm_hash, name, symbol, decimals, initial_supply, fee_payment, &mut state);
 
         // Always release the lock, regardless of success or error.
         state.locked = false;
@@ -316,7 +316,7 @@ impl TokenFactory {
             creator: creator.clone(),
             created_at: env.ledger().timestamp(),
             burn_enabled: true,
-            max_supply,
+            max_supply: None,
         });
 
         let creator_key = DataKey::CreatorTokens(creator.clone());
