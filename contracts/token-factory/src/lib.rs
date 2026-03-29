@@ -17,6 +17,18 @@ pub trait TokenInit {
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
+pub struct BatchTokenParams {
+    pub salt: BytesN<32>,
+    pub token_wasm_hash: BytesN<32>,
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u32,
+    pub initial_supply: i128,
+    pub max_supply: Option<i128>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TokenInfo {
     pub name: String,
     pub symbol: String,
@@ -306,6 +318,139 @@ impl TokenFactory {
         env.events()
             .publish((symbol_short!("created"),), (token_address.clone(), creator, token_name, token_symbol));
         Ok(token_address)
+    }
+
+    /// Validate a single batch entry's params without deploying anything.
+    fn validate_batch_params(p: &BatchTokenParams) -> Result<(), Error> {
+        if p.name.len() == 0 || p.name.len() > 32 {
+            return Err(Error::InvalidParameters);
+        }
+        if p.symbol.len() == 0 || p.symbol.len() > 12 {
+            return Err(Error::InvalidParameters);
+        }
+        if let Some(cap) = p.max_supply {
+            if cap <= 0 || p.initial_supply > cap {
+                return Err(Error::InvalidParameters);
+            }
+        }
+        Ok(())
+    }
+
+    /// Deploy and register one token from a `BatchTokenParams` entry.
+    /// Assumes params are already validated and fee already paid.
+    fn deploy_one(
+        env: &Env,
+        creator: &Address,
+        p: BatchTokenParams,
+        state: &mut FactoryState,
+    ) -> Result<Address, Error> {
+        let token_address = env
+            .deployer()
+            .with_address(creator.clone(), p.salt)
+            .deploy(p.token_wasm_hash);
+
+        TokenInitClient::new(env, &token_address).initialize(
+            creator,
+            &p.decimals,
+            &p.name,
+            &p.symbol,
+        );
+
+        if p.initial_supply > 0 {
+            token::StellarAssetClient::new(env, &token_address).mint(creator, &p.initial_supply);
+        }
+
+        let new_count = state.token_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
+        state.token_count = new_count;
+        let index = state.token_count;
+
+        let token_name = p.name.clone();
+        let token_symbol = p.symbol.clone();
+        env.storage().instance().set(&index, &TokenInfo {
+            name: p.name,
+            symbol: p.symbol,
+            decimals: p.decimals,
+            creator: creator.clone(),
+            created_at: env.ledger().timestamp(),
+            burn_enabled: true,
+            max_supply: p.max_supply,
+        });
+
+        let creator_key = (symbol_short!("crtoks"), creator.clone());
+        let mut list: Vec<u32> = env
+            .storage()
+            .instance()
+            .get(&creator_key)
+            .unwrap_or_else(|| vec![env]);
+        list.push_back(index);
+        env.storage().instance().set(&creator_key, &list);
+
+        env.storage().instance().set(&(&token_address, symbol_short!("idx")), &index);
+        Self::extend_token_ttl(env, &token_address, index);
+
+        env.events()
+            .publish((symbol_short!("created"),), (token_address.clone(), creator.clone(), token_name, token_symbol));
+        Ok(token_address)
+    }
+
+    /// Create multiple tokens in a single transaction.
+    /// All params are validated before any token is deployed or fees are charged.
+    /// Total fee = base_fee * tokens.len().
+    pub fn create_tokens_batch(
+        env: Env,
+        creator: Address,
+        tokens: Vec<BatchTokenParams>,
+        fee_payment: i128,
+    ) -> Result<Vec<Address>, Error> {
+        Self::require_not_paused(&env)?;
+        creator.require_auth();
+
+        let mut state = Self::load_state(&env)?;
+
+        if state.locked {
+            return Err(Error::Reentrancy);
+        }
+
+        let count = tokens.len() as i128;
+        if count == 0 {
+            return Err(Error::InvalidParameters);
+        }
+
+        // Validate all params upfront — no deployment happens until this passes.
+        for p in tokens.iter() {
+            Self::validate_batch_params(&p)?;
+        }
+
+        // Total fee = base_fee * number of tokens
+        let total_fee = state.base_fee.checked_mul(count).ok_or(Error::ArithmeticOverflow)?;
+        if fee_payment < total_fee {
+            return Err(Error::InsufficientFee);
+        }
+
+        // Charge the full fee once before any deployment.
+        state.locked = true;
+        Self::save_state(&env, &state);
+
+        let mut addresses: Vec<Address> = vec![&env];
+        let mut result: Result<(), Error> = Ok(());
+
+        for p in tokens.into_iter() {
+            match Self::deploy_one(&env, &creator, p, &mut state) {
+                Ok(addr) => addresses.push_back(addr),
+                Err(e) => { result = Err(e); break; }
+            }
+        }
+
+        state.locked = false;
+
+        if let Err(e) = result {
+            Self::save_state(&env, &state);
+            return Err(e);
+        }
+
+        Self::distribute_fee(&env, &state, &creator, fee_payment)?;
+        Self::save_state(&env, &state);
+        Ok(addresses)
     }
 
     pub fn set_metadata(
