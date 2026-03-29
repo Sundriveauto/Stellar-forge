@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import type { TokenInfo, SortOrder } from '../types'
 import { applyFilters } from '../utils/tokenFilters'
 import { useDebounce } from '../hooks/useDebounce'
@@ -9,7 +9,17 @@ interface DashboardProps {
   tokens?: TokenInfo[]
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ tokens }) => {
+/**
+ * Memoized with React.memo — re-renders only when the tokens prop changes.
+ * Internal filter/sort state changes are isolated here and don't propagate upward.
+ *
+ * filteredTokens is wrapped in useMemo so the applyFilters computation only
+ * re-runs when tokens, search, creator, or sort actually change.
+ *
+ * Event handlers are wrapped in useCallback so their references stay stable
+ * across renders, which is important if they are ever passed to memoized children.
+ */
+const Dashboard: React.FC<DashboardProps> = memo(({ tokens }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [creatorFilter, setCreatorFilter] = useState('')
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest')
@@ -17,12 +27,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ tokens }) => {
   const debouncedSearch = useDebounce(searchQuery, 300)
   const debouncedCreator = useDebounce(creatorFilter, 300)
 
+  // Expensive filter + sort — only recomputes when inputs change
   const filteredTokens = useMemo(
     () => applyFilters(tokens, debouncedSearch, debouncedCreator, sortOrder),
-    [tokens, debouncedSearch, debouncedCreator, sortOrder]
+    [tokens, debouncedSearch, debouncedCreator, sortOrder],
   )
 
   const isFilterActive = debouncedSearch !== '' || debouncedCreator !== ''
+
+  // Stable callback references so child inputs don't re-render unnecessarily
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value)
+  }, [])
+
+  const handleCreatorChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setCreatorFilter(e.target.value)
+  }, [])
+
+  const handleSortChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSortOrder(e.target.value as SortOrder)
+  }, [])
 
   return (
     <div className="space-y-4">
@@ -32,14 +56,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ tokens }) => {
           <Input
             label="Search by name or symbol"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={handleSearchChange}
           />
         </div>
         <div className="flex-1 min-w-0">
           <Input
             label="Filter by creator address"
             value={creatorFilter}
-            onChange={e => setCreatorFilter(e.target.value)}
+            onChange={handleCreatorChange}
           />
         </div>
         <div className="space-y-1 w-full sm:w-auto sm:min-w-[180px]">
@@ -49,8 +73,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ tokens }) => {
           <select
             id="sort-order"
             value={sortOrder}
-            onChange={e => setSortOrder(e.target.value as SortOrder)}
-            className="block w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm bg-white dark:bg-gray-700 dark:text-white min-h-[44px]"
+            onChange={handleSortChange}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white"
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
@@ -93,4 +117,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ tokens }) => {
       )}
     </div>
   )
-}
+})
+
+Dashboard.displayName = 'Dashboard'
+
+export { Dashboard }

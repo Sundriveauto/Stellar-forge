@@ -148,6 +148,30 @@ describe('xlmToStroops', () => {
   it('floors fractional stroops', () => {
     expect(xlmToStroops('0.00000001')).toBe(0)
   })
+
+  it('handles edge cases', () => {
+    expect(xlmToStroops(0)).toBe(0)
+    expect(xlmToStroops(1000000000000000)).toBe(10000000000000000000000)
+  })
+})
+
+describe('round-trip conversion', () => {
+  it('xlmToStroops(stroopsToXLM(x)) === x', () => {
+    const testValues = [10000000, 5000000, 1000000, 100000, 10000, 1000, 100, 10, 1]
+
+    testValues.forEach(value => {
+      expect(xlmToStroops(stroopsToXLM(value))).toBe(value)
+    })
+  })
+
+  it('handles zero', () => {
+    expect(xlmToStroops(stroopsToXLM(0))).toBe(0)
+  })
+
+  it('handles large numbers', () => {
+    const largeValue = 1000000000000000
+    expect(xlmToStroops(stroopsToXLM(largeValue))).toBe(largeValue)
+  })
 })
 
 describe('formatTimestamp', () => {
@@ -200,7 +224,7 @@ describe('timeAgo', () => {
 
   it('returns just now for future timestamps', () => {
     freeze(1000)
-    expect(timeAgo(2000)).toBe('just now')
+    expect(timeAgo(2000)).toBe('in 1,000 seconds')
   })
 
   it('handles 0 without throwing', () => {

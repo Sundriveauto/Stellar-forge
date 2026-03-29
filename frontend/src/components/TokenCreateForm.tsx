@@ -31,6 +31,8 @@ export const TokenCreateForm: React.FC = () => {
   const [decimals, setDecimals] = useState('7')
   const [initialSupply, setInitialSupply] = useState('')
   const [description, setDescription] = useState('')
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [deployedToken, setDeployedToken] = useState<{ address: string; name: string; symbol: string } | null>(null)
   const [pendingParams, setPendingParams] = useState<TokenDeployParams | null>(null)
   const [deploymentSteps, setDeploymentSteps] = useState<ProgressStep[]>([
@@ -45,6 +47,38 @@ export const TokenCreateForm: React.FC = () => {
   const { requireTos } = useTos()
   const { t } = useTranslation()
   const { hasSufficientBalance, shortfall, isTestnet } = useBalanceCheck(ESTIMATED_FEE_XLM)
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      addToast('Please select a valid image file', 'error')
+      return
+    }
+
+    // Validate file size (e.g., max 5MB)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      addToast('Image file is too large. Maximum size is 5MB', 'error')
+      return
+    }
+
+    setSelectedImage(file)
+
+    // Generate preview
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeImage = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+  }
 
   // Use a ref so the builder always sees the latest params without re-creating the hook
   const paramsRef = useRef<TokenDeployParams | null>(null)
@@ -99,7 +133,7 @@ export const TokenCreateForm: React.FC = () => {
       tokenWasmHash: STELLAR_CONFIG.factoryContractId,
       feePayment: '100000',
       ...(sanitizedDescription && {
-        metadata: { description: sanitizedDescription, image: new File([], '') },
+        metadata: { description: sanitizedDescription, image: selectedImage || new File([], '') },
       }),
     }
 
@@ -133,6 +167,8 @@ export const TokenCreateForm: React.FC = () => {
       setDecimals('7')
       setInitialSupply('')
       setDescription('')
+      setSelectedImage(null)
+      setImagePreview(null)
       await refreshBalance()
     } catch (err) {
       updateStep(0, 'error')
@@ -225,7 +261,49 @@ export const TokenCreateForm: React.FC = () => {
             rows={3}
           />
         </div>
-        <Button type="submit" disabled={isDeploying || !hasSufficientBalance} className="w-full sm:w-auto">
+
+        {/* Image Upload */}
+        <div>
+          <label htmlFor="image" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Token Image (Optional)
+          </label>
+          <input
+            id="image"
+            type="file"
+            accept="image/*"
+            onChange={handleImageSelect}
+            disabled={isDeploying}
+            className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900 dark:file:text-blue-300 disabled:opacity-50"
+          />
+          {imagePreview && (
+            <div className="mt-4 p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800">
+              <div className="flex items-start gap-4">
+                <img
+                  src={imagePreview}
+                  alt="Token preview"
+                  className="w-20 h-20 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {selectedImage?.name}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {(selectedImage?.size ? (selectedImage.size / 1024).toFixed(1) : 0)} KB
+                  </p>
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="mt-2 text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    Remove image
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Button type="submit" disabled={isDeploying} className="w-full sm:w-auto">
           {isDeploying ? t('tokenForm.deploying') : t('tokenForm.deploy')}
         </Button>
         {!hasSufficientBalance && (

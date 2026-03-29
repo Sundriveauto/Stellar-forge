@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useStellarContext } from '../context/StellarContext'
 import { useNetwork } from '../context/NetworkContext'
@@ -19,18 +19,6 @@ import { SetMetadataForm } from './SetMetadataForm'
 const BASE_URL = 'https://stellarforge.app'
 
 type ActivePanel = 'mint' | 'burn' | 'metadata' | null
-
-const BASE_URL = 'https://stellarforge.app'
-
-function setMeta(property: string, content: string) {
-  let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`)
-  if (!el) {
-    el = document.createElement('meta')
-    el.setAttribute('property', property)
-    document.head.appendChild(el)
-  }
-  el.setAttribute('content', content)
-}
 
 function setMeta(property: string, content: string) {
   let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`)
@@ -115,14 +103,28 @@ export const TokenDetail: React.FC = () => {
     }
   }, [token, address])
 
-  const handleSetMetadata = async (_addr: string, uri: string) => {
-    addToast(`Metadata URI set: ${uri}`, 'success')
-    if (token) setToken({ ...token, metadataUri: uri })
-    setActivePanel(null)
-  }
+  /**
+   * Stable callback — only recreated when token or addToast changes.
+   * Passed to SetMetadataForm as onSubmit prop; useCallback prevents
+   * SetMetadataForm from re-rendering when unrelated state changes.
+   */
+  const handleSetMetadata = useCallback(
+    async (_addr: string, uri: string) => {
+      addToast(`Metadata URI set: ${uri}`, 'success')
+      if (token) setToken({ ...token, metadataUri: uri })
+      setActivePanel(null)
+    },
+    [addToast, token],
+  )
 
-  const togglePanel = (panel: ActivePanel) =>
-    setActivePanel((prev) => (prev === panel ? null : panel))
+  /**
+   * Stable callback — toggles the active action panel.
+   * Wrapped in useCallback so Button onClick refs stay stable across renders.
+   */
+  const togglePanel = useCallback(
+    (panel: ActivePanel) => setActivePanel((prev) => (prev === panel ? null : panel)),
+    [],
+  )
 
   if (loading) {
     return (

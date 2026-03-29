@@ -26,17 +26,40 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
 
   const ipfsReady = isIpfsConfigured()
 
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file) {
+      setImageFile(null)
+      setImagePreview(null)
+      return
+    }
 
     const validation = isValidImageFile(file)
     if (!validation.valid) {
       addToast(validation.error || 'Invalid image file', 'error')
+      setImageFile(null)
+      setImagePreview(null)
       return
     }
 
     setImageFile(file)
+
+    // Create preview
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    // Reset the input
+    const input = document.getElementById('image') as HTMLInputElement
+    if (input) input.value = ''
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,10 +170,31 @@ export const MetadataUploadForm: React.FC<MetadataUploadFormProps> = ({
             dark:file:bg-blue-900/30 dark:file:text-blue-300
             hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50"
         />
-        {imageFile && (
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Selected: {imageFile.name}
-          </p>
+        {imagePreview && (
+          <div className="mt-4 flex flex-col items-center space-y-2">
+            <img
+              src={imagePreview}
+              alt="Token preview"
+              className="max-w-32 max-h-32 object-contain border border-gray-300 dark:border-gray-600 rounded-md"
+            />
+            <div className="text-center">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {imageFile?.name}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {(imageFile?.size || 0) / 1024 / 1024 < 1
+                  ? `${Math.round((imageFile?.size || 0) / 1024)} KB`
+                  : `${((imageFile?.size || 0) / 1024 / 1024).toFixed(2)} MB`}
+              </p>
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                className="mt-2 text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+              >
+                Remove image
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
