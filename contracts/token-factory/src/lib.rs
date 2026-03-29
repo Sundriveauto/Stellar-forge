@@ -98,6 +98,8 @@ pub enum Error {
     StateNotFound = 13,
     /// Invalid token parameters (e.g. negative supply, invalid name/symbol)
     InvalidTokenParams = 14,
+    /// Invalid decimals value (must be 0-18 inclusive)
+    InvalidDecimals = 15,
 }
 
 #[contract]
@@ -205,6 +207,10 @@ impl TokenFactory {
 
     /// Deploy a new token contract from `token_wasm_hash`, initialize it,
     /// and register it with the factory. `salt` must be unique per creator.
+    ///
+    /// # Parameters
+    /// - `decimals`: Number of decimal places for the token (0-18 inclusive).
+    ///   Stellar conventionally uses 7 decimals. Values outside 0-18 are rejected.
     pub fn create_token(
         env: Env,
         creator: Address,
@@ -257,6 +263,11 @@ impl TokenFactory {
         // Validate token symbol: non-empty and at most 12 characters
         if symbol.len() == 0 || symbol.len() > 12 {
             return Err(Error::InvalidTokenParams);
+        }
+
+        // Validate decimals: must be between 0 and 18 inclusive
+        if decimals > 18 {
+            return Err(Error::InvalidDecimals);
         }
 
         if fee_payment < state.base_fee {

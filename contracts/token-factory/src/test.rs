@@ -142,6 +142,57 @@ fn test_create_token_blocked_when_paused() {
     assert_eq!(result, Err(Ok(Error::ContractPaused)));
 }
 
+#[test]
+fn test_create_token_invalid_decimals_too_high() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    s.fund(&creator, 1_000);
+
+    let result = s.client.try_create_token(
+        &creator, &s.salt(0), &s.dummy_hash(),
+        &String::from_str(&s.env, "MyToken"),
+        &String::from_str(&s.env, "MTK"),
+        &19, &0_u128, &1_000,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidDecimals)));
+}
+
+#[test]
+fn test_create_token_boundary_decimals() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    s.fund(&creator, 1_000);
+
+    // Test decimals = 0 (should succeed)
+    let result_0 = s.client.try_create_token(
+        &creator, &s.salt(0), &s.dummy_hash(),
+        &String::from_str(&s.env, "Token0"),
+        &String::from_str(&s.env, "T0"),
+        &0, &0_u128, &1_000,
+    );
+    // This will fail at deploy since dummy hash, but not at validation
+    // We can't easily test success without real wasm, so just check it doesn't fail with InvalidDecimals
+    assert_ne!(result_0, Err(Ok(Error::InvalidDecimals)));
+
+    // Test decimals = 7 (should succeed)
+    let result_7 = s.client.try_create_token(
+        &creator, &s.salt(1), &s.dummy_hash(),
+        &String::from_str(&s.env, "Token7"),
+        &String::from_str(&s.env, "T7"),
+        &7, &0_u128, &1_000,
+    );
+    assert_ne!(result_7, Err(Ok(Error::InvalidDecimals)));
+
+    // Test decimals = 18 (should succeed)
+    let result_18 = s.client.try_create_token(
+        &creator, &s.salt(2), &s.dummy_hash(),
+        &String::from_str(&s.env, "Token18"),
+        &String::from_str(&s.env, "T18"),
+        &18, &0_u128, &1_000,
+    );
+    assert_ne!(result_18, Err(Ok(Error::InvalidDecimals)));
+}
+
 // ── set_metadata ──────────────────────────────────────────────────────────────
 
 #[test]
