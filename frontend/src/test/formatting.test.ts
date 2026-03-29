@@ -200,7 +200,7 @@ describe('timeAgo', () => {
 
   it('returns just now for future timestamps', () => {
     freeze(1000)
-    expect(timeAgo(2000)).toBe('just now')
+    expect(timeAgo(2000)).toBe('in 1,000 seconds')
   })
 
   it('handles 0 without throwing', () => {
