@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import { formatAddress, formatTimestamp, timeAgo } from '../utils/formatting'
 import { CopyButton } from './CopyButton'
@@ -7,7 +8,12 @@ interface TokenCardProps {
   token: TokenRow
 }
 
-export const TokenCard: React.FC<TokenCardProps> = ({ token }) => {
+/**
+ * Memoized with React.memo — re-renders only when the token prop changes by reference.
+ * This prevents unnecessary re-renders when parent state (filters, pagination) updates
+ * but the individual token data hasn't changed.
+ */
+export const TokenCard: React.FC<TokenCardProps> = memo(({ token }) => {
   return (
     <li className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-4 hover:shadow-md dark:hover:shadow-slate-900/50 transition-shadow">
       <div className="flex items-start justify-between gap-3">
@@ -80,4 +86,6 @@ export const TokenCard: React.FC<TokenCardProps> = ({ token }) => {
       </div>
     </li>
   )
-}
+})
+
+TokenCard.displayName = 'TokenCard'
