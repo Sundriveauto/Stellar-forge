@@ -502,6 +502,23 @@ fn test_non_admin_cannot_pause() {
     assert_eq!(s.client.try_pause(&stranger), Err(Ok(Error::Unauthorized)));
 }
 
+#[test]
+fn test_burn_allowed_when_paused() {
+    let s = Setup::new();
+    let creator = Address::generate(&s.env);
+    let token_addr = seed_token_with_burn(&s, &creator, true);
+
+    let burner = Address::generate(&s.env);
+    StellarAssetClient::new(&s.env, &token_addr).mint(&burner, &500);
+
+    s.client.pause(&s.admin);
+    assert!(s.client.get_state().paused);
+
+    // burn must succeed even while the factory is paused
+    s.client.burn(&token_addr, &burner, &200);
+    assert_eq!(TokenClient::new(&s.env, &token_addr).balance(&burner), 300);
+}
+
 // ── transfer_admin ────────────────────────────────────────────────────────────
 
 #[test]
