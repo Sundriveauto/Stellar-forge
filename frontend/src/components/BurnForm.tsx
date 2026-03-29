@@ -46,7 +46,7 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   const amountExceedsBalance =
     !!amount && !!balance && BigInt(balance) > 0n && BigInt(amount) > BigInt(balance)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!wallet.isConnected) { addToast('Connect your wallet first', 'error'); return }
     if (amountExceedsBalance) return
