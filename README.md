@@ -1,5 +1,7 @@
 # StellarForge - Stellar Token Deployer
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Ejirowebfi/Stellar-forge&root=frontend&env=VITE_FACTORY_CONTRACT_ID,VITE_TOKEN_WASM_HASH,VITE_IPFS_API_KEY,VITE_IPFS_API_SECRET&envDescription=Required%20environment%20variables%20for%20StellarForge&envLink=https://github.com/Ejirowebfi/Stellar-forge/blob/main/docs/deployment-vercel.md)
+
 StellarForge is a user-friendly decentralized application (dApp) that enables creators, entrepreneurs, and businesses in emerging markets to deploy custom tokens on the Stellar blockchain without writing a single line of code.
 
 ## Features
@@ -196,6 +198,8 @@ cd frontend
 npm run build
 # Deploy the dist/ folder to your hosting service (Vercel, Netlify, etc.)
 ```
+
+For a full step-by-step Vercel deployment guide see [docs/deployment-vercel.md](./docs/deployment-vercel.md).
 
 ## Project Structure
 

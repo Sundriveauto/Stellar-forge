@@ -24,6 +24,7 @@ export const BurnForm: React.FC<BurnFormProps> = ({
   const { wallet } = useWalletContext()
   const { addToast } = useToast()
   const { requireTos } = useTos()
+  const { hasSufficientBalance, shortfall, isTestnet } = useBalanceCheck(ESTIMATED_FEE_XLM)
 
   const [tokenAddress, setTokenAddress] = useState(initialAddress)
   const [amount, setAmount] = useState('')
@@ -115,11 +116,14 @@ export const BurnForm: React.FC<BurnFormProps> = ({
           type="submit"
           variant="secondary"
           loading={isSubmitting}
-          disabled={isSubmitting || amountExceedsBalance}
+          disabled={isSubmitting || amountExceedsBalance || !hasSufficientBalance}
           className="w-full sm:w-auto"
         >
           Burn Tokens
         </Button>
+        {!hasSufficientBalance && (
+          <InsufficientBalanceWarning shortfall={shortfall} isTestnet={isTestnet} />
+        )}
       </form>
 
       <ConfirmModal
