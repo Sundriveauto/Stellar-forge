@@ -1,9 +1,11 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { ToastContainer, Button, Spinner } from './components/UI'
 import './App.css'
 import { useTranslation } from 'react-i18next'
 import { useDarkMode } from './hooks/useDarkMode'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { trackEvent, trackPageView } from './services/analytics'
+import { AnalyticsOptOut } from './components/AnalyticsOptOut'
 import { WalletProvider } from './context/WalletContext'
 import { ToastProvider, useToast } from './context/ToastContext'
 import { NetworkProvider } from './context/NetworkContext'
@@ -42,17 +44,26 @@ function AppContent() {
   const { isDarkMode, toggleDarkMode } = useDarkMode()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const { state: factoryState } = useFactoryState()
+  const location = useLocation()
 
   const isAdmin = !!wallet.address && !!factoryState?.admin && wallet.address === factoryState.admin
 
   const { theme, toggleTheme } = useTheme()
+
+  // Track page views on route changes
+  useEffect(() => {
+    trackPageView(location.pathname)
+  }, [location.pathname])
 
   const handleGetStarted = () => addToast(t('home.welcomeToast'), 'info')
 
   const handleConnect = async () => {
     try {
       await connect()
-      if (!error) addToast(t('wallet.connected'), 'success')
+      if (!error) {
+        addToast(t('wallet.connected'), 'success')
+        trackEvent('wallet_connected')
+      }
     } catch {
       addToast(t('wallet.connectFailed'), 'error')
     }
